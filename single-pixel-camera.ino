@@ -212,8 +212,8 @@ void setup() {
 }
 
 void loop() {
-  // mainScreen();
-  Serial.println(getIntegerScreen("Test:"));
+  mainScreen();
+  // Serial.println(String(getIntegerScreen("Test:")));
 
   // computerControl();
 }
@@ -437,11 +437,17 @@ void scanAreaScreen() {
       switch(getButtonPressed(buttons, 6)) {
         case 0:
           xTmp = getIntegerScreen("X:");
+          redraw = true;
           break;
         case 1:
-          ;
+          yTmp = getIntegerScreen("Y:");
+          redraw = true;
           break;
         case 2:
+          pathTmp += 1;
+          if(pathTmp >= 4) {
+            pathTmp = 0;
+          }
           freshScanAreaArrowMatrix(background, xTmp, yTmp, pathTmp);
           break;
         case 3:
@@ -487,8 +493,8 @@ void freshScanAreaArrowMatrix(uint16_t background, uint16_t x, uint16_t y, uint8
   ;
 }//TODO
 
-//Get integer from touch screen
-int getIntegerScreen(String comment) {
+//Get integer from touch screen, TODO:change the least bit variation bug
+long getIntegerScreen(String comment) {
   struct Button buttons[12] = {
     {14, 164, 90, 70, "1", TFT_DARKGREY},
     {114, 164, 90, 70, "2", TFT_DARKGREY},
@@ -506,7 +512,7 @@ int getIntegerScreen(String comment) {
 
   uint16_t background = tft.color565(180, 180, 190);
   uint16_t textBoxBackground = tft.color565(50, 50, 50);
-  int tmp = 0;
+  long tmp = 0;
   bool redraw = false;
   bool isPressed = false;
 
@@ -520,57 +526,46 @@ int getIntegerScreen(String comment) {
       switch(getButtonPressed(buttons, 12)) {
         case 0:
           tmp = tmp*10 + 1;
-          freshIntegerTextBox(tmp, textBoxBackground);
           isPressed = true;
           break;
         case 1:
           tmp = tmp*10 + 2;
-          freshIntegerTextBox(tmp, textBoxBackground);
           isPressed = true;
           break;
         case 2:
           tmp = tmp*10 + 3;
-          freshIntegerTextBox(tmp, textBoxBackground);
           isPressed = true;
           break;
         case 3:
           tmp = tmp*10 + 4;
-          freshIntegerTextBox(tmp, textBoxBackground);
           isPressed = true;
           break;
         case 4:
           tmp = tmp*10 + 5;
-          freshIntegerTextBox(tmp, textBoxBackground);
           isPressed = true;
           break;
         case 5:
           tmp = tmp*10 + 6;
-          freshIntegerTextBox(tmp, textBoxBackground);
           isPressed = true;
           break;
         case 6:
           tmp = tmp*10 + 7;
-          freshIntegerTextBox(tmp, textBoxBackground);
           isPressed = true;
           break;
         case 7:
           tmp = tmp*10 + 8;
-          freshIntegerTextBox(tmp, textBoxBackground);
           isPressed = true;
           break;
         case 8:
           tmp = tmp*10 + 9;
-          freshIntegerTextBox(tmp, textBoxBackground);
           isPressed = true;
           break;
         case 9:
           tmp = floor(tmp/10);
-          freshIntegerTextBox(tmp, textBoxBackground);
           isPressed = true;
           break;
         case 10:
           tmp = tmp*10;
-          freshIntegerTextBox(tmp, textBoxBackground);
           isPressed = true;
           break;
         case 11:
@@ -578,10 +573,15 @@ int getIntegerScreen(String comment) {
           break;
       }
       if(isPressed) {
+        if(tmp > 99999999) {
+          tmp = floor((float)tmp / 10);
+        }
+        freshIntegerTextBox(tmp, textBoxBackground);
         delay(100);
         while(getButtonPressed(buttons, 12) != -1) {}
         delay(100);
         while(getButtonPressed(buttons, 12) != -1) {}
+        isPressed = false;
       }
     }
   }
@@ -596,14 +596,14 @@ void drawIntegerScreen(Button* buttons, int size, uint16_t background, String co
   tft.drawSmoothRoundRect(9, 69, 10, 3, 300, 70, TFT_DARKCYAN, background);
   tft.fillSmoothRoundRect(12, 72, 295, 65, 8, textBoxBackground, TFT_DARKCYAN);
 }
-void freshIntegerTextBox(int integer, uint16_t background) {
+void freshIntegerTextBox(long integer, uint16_t background) {
   tft.setTextSize(4);
   tft.setTextDatum(BL_DATUM);
   tft.setTextColor(TFT_WHITE, background);
   tft.drawString(String(integer)+" ", 30, 120);
   tft.fillRect(30, 125, 270, 3, background);
 }
-void freshIntegerCursor(int integer, uint16_t background) {
+void freshIntegerCursor(long integer, uint16_t background) {
   int digit = 0;
   uint8_t textWidth = tft.textWidth(" ");
   while(integer > 0) {
@@ -622,7 +622,7 @@ void freshIntegerCursor(int integer, uint16_t background) {
 int getButtonPressed(Button* buttons, int size) {
   int x = -1;
   int y = -1;
-  touch.getRawTouchingPoint(&x, &y);
+  touch.getTouchingPointNoBlocking(&x, &y);
   if(x == -1 || y == -1) {
     return -1;
   }
