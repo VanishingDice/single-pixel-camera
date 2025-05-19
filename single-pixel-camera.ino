@@ -414,7 +414,7 @@ void scanAreaScreen() {
     {244, 84, 70, 70, "X", TFT_SKYBLUE},
     {244, 164, 70, 70, "Y", TFT_SKYBLUE},
     {244, 244, 70, 70, "Path", TFT_SKYBLUE},
-    {4, 324, 310, 70, "Pulse/Pixel", TFT_SKYBLUE},
+    {4, 324, 310, 70, F("Pulse Per Pixel"), TFT_SKYBLUE},
     {4, 404, 150, 70, "Exit", TFT_SKYBLUE},
     {164, 404, 150, 70, "Save", TFT_SKYBLUE},
   };
@@ -422,7 +422,7 @@ void scanAreaScreen() {
   uint16_t background = tft.color565(100, 100, 100);
 
   uint16_t xTmp, yTmp;
-  uint8_t pathTmp;
+  uint8_t pathTmp = scan.path;
   getScanXY(&xTmp, &yTmp);
   uint16_t pppTmp = motor[scan.pixelMotor].pulsePerPixel;
   bool redraw = false;//whole screen refresh
@@ -445,23 +445,24 @@ void scanAreaScreen() {
           break;
         case 2:
           pathTmp += 1;
-          if(pathTmp >= 4) {
+          if(pathTmp >= 8) {
             pathTmp = 0;
           }
           freshScanAreaArrowMatrix(background, xTmp, yTmp, pathTmp);
           break;
         case 3:
-          return;
+          pppTmp = getIntegerScreen(F("Pulse Per Pixel:"));
+          redraw = true;
           break;
         case 4:
+          return;
+          break;
+        case 5:
           setScanXY(xTmp, yTmp);
           scan.path = pathTmp;
           motor[scan.pixelMotor].pulsePerPixel = pppTmp;
           motor[scan.lineMotor].pulsePerPixel = pppTmp;
           return;
-          break;
-        case 5:
-          ;
           break;
       }
     }
@@ -483,15 +484,19 @@ void drawScanAreaScreen(Button* buttons, int size, uint16_t background, uint16_t
   tft.setTextDatum(TL_DATUM);
   tft.drawString("Total time:", 9, 24);
   tft.setTextColor(TFT_SKYBLUE);
-  //TODO:Not accurate
-  int totalSeconds = ((long)x * y * motor[scan.pixelMotor].pulsePerPixel * motor[scan.pixelMotor].intervalTime 
+  // TODO:Not accurate
+  long totalSeconds = ((long)x * y * motor[scan.pixelMotor].pulsePerPixel * motor[scan.pixelMotor].intervalTime 
                           + y * motor[scan.lineMotor].pulsePerPixel * motor[scan.lineMotor].intervalTime) / 1000000 * (2 - scan.isSShape);//calculate based on motor movement time
   tft.drawString(String((int)floor(totalSeconds/3600))+"h "+String((int)floor(totalSeconds/60%60))+"m "+String(totalSeconds%60)+"s", 9, 44);
 
 }
 void freshScanAreaArrowMatrix(uint16_t background, uint16_t x, uint16_t y, uint8_t path) {
-  ;
-}//TODO
+  float ratio = (float)150 / max(x,y);
+  // tft.fillRect(10, 110, ratio*x - 2, ratio*y - 2, background);
+  // Serial.println("X:"+String(ratio*x)+", Y:"+String(ratio*y)+", Path:"+String(path));
+  drawArrowMatrix(9, 109, ratio*x, ratio*y, path-1<0 ? 7 : path-1, background, 15);//cover the last arrows
+  drawArrowMatrix(9, 109, ratio*x, ratio*y, path, getFrontColor(background), 15);
+}
 
 //Get integer from touch screen, TODO:change the least bit variation bug
 long getIntegerScreen(String comment) {
@@ -778,6 +783,9 @@ void drawArrowMatrix(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint8_t pat
         drawArrow(x + pixelArrowSideShift + i*pixelArrowStep, y + h - pixelArrowTipShift, h - pixelArrowTipShift - pixelArrowEndDistance, 0, color, tipSize);
       }
       break;
+    default:
+      Serial.println("Draw Arrow Matrix Path error!");
+      break;
   }
 }
 
@@ -807,6 +815,9 @@ void drawArrow(uint16_t x, uint16_t y, int16_t distance, uint8_t dir, uint16_t c
       tft.drawLine(x, y, x + distance, y, color);
       tft.drawLine(x + distance, y, x + distance - max(round(distance/tipSize),minTipSize), y + max(round(distance/tipSize) - tipSharp,minTipSize), color);
       tft.drawLine(x + distance, y, x + distance - max(round(distance/tipSize),minTipSize), y - max(round(distance/tipSize) - tipSharp,minTipSize), color);
+      break;
+    default:
+      Serial.println("Draw Arrow Path Error!");
       break;
   }
 }
