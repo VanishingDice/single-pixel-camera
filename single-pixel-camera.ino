@@ -58,6 +58,13 @@ struct {
   uint16_t intervalTime;
 } timer;
 
+enum Sensor {
+  TCS34725,
+  AS73211,
+  AS7341, 
+  SENSOR_ALL
+};
+
 //Scan data, constantly in the scanning process
 struct ScanParam {
   uint8_t path = 0;
@@ -75,8 +82,11 @@ struct ScanParam {
 
   bool isSShape = false;
 
+  Sensor sensor = TCS34725;
+
   uint8_t integrationTime = TCS34725_INTEGRATIONTIME_24MS; //Maximum interval*pulsePerPixel
   tcs34725Gain_t gain = TCS34725_GAIN_60X;
+  //TODO:add more sensors
 } scan;
 
 struct Button{
@@ -102,6 +112,8 @@ String pathComment[8] = {
 
 //For output gain information
 const char* GainStr[] = {"GAIN_1X","GAIN_4X","GAIN_16X","GAIN_60X"};
+
+const char* SensorStr[] = {"TCS34725","AS73211","AS7341"};
 
 //
 struct {
@@ -155,8 +167,6 @@ static int bmpHead[54] = {
 //temp var
 uint16_t i;
 uint8_t lineTemp[1000][3];//for S shape invert, order:BGR
-
-int motorIntervalTimeShift = 0;
 
 
 void setup() {
@@ -309,9 +319,9 @@ void drawScanScreen(Button* buttons, int size, uint16_t background) {
 
 //Setting
 void settingScreen() {
-  struct Button buttons[7] =  {
+  struct Button buttons[6] =  {
     {4, 164, 150, 70, "Scan Area", TFT_DARKGREY},
-    {164, 164, 150, 70, "Scan Path", TFT_DARKGREY},
+    // {164, 164, 150, 70, "Scan Path", TFT_DARKGREY},
     {4, 244, 150, 70, "Filename", TFT_DARKGREY},
     {164, 244, 150, 70, "Storage", TFT_DARKGREY},
     {4, 324, 150, 70, "Motor", TFT_DARKGREY},
@@ -324,13 +334,13 @@ void settingScreen() {
   int pressed = -1;
 
   while(1) {
-    drawSettingScreen(buttons, 7, background);
+    drawSettingScreen(buttons, 6, background);
     setDrawTimeFormat(9, 0, TFT_SKYBLUE, background, 2);
     drawTime();
     redraw = false;
     while(!redraw) {
       refreshTime();
-      pressed = getButtonPressed(buttons, 7);
+      pressed = getButtonPressed(buttons, 6);
       switch(pressed) {
         case 0:
           scanAreaScreen();
@@ -346,12 +356,10 @@ void settingScreen() {
           // 
           break;
         case 4:
-          // 
+          sensorScreen();
+          redraw = true; 
           break;
         case 5:
-          // 
-          break;
-        case 6:
           return;
           break;
       }
@@ -410,13 +418,20 @@ void imageScreen() {
 
 //Scan Area Setting
 void scanAreaScreen() {
-  struct Button buttons[6] = {
+  struct Button buttons[11] = {
     {244, 84, 70, 70, "X", TFT_SKYBLUE},
     {244, 164, 70, 70, "Y", TFT_SKYBLUE},
     {244, 244, 70, 70, "Path", TFT_SKYBLUE},
-    {4, 324, 310, 70, F("Pulse Per Pixel"), TFT_SKYBLUE},
+    {4, 324, 150, 70, "S Shape", TFT_SKYBLUE},
+    {164, 324, 150, 70, "Pulse/Pixel", TFT_SKYBLUE},
     {4, 404, 150, 70, "Exit", TFT_SKYBLUE},
     {164, 404, 150, 70, "Save", TFT_SKYBLUE},
+    //for current point button, no display
+    {9, 109, 75, 75, "0", TFT_BLACK},//Left up
+    {84, 109, 75, 75, "1", TFT_BLACK},//Right up
+    {84, 184, 75, 75, "2", TFT_BLACK},//Right down
+    {9, 184, 75, 75, "3", TFT_BLACK},//Left down
+
   };
 
   uint16_t background = tft.color565(100, 100, 100);
@@ -425,16 +440,18 @@ void scanAreaScreen() {
   uint8_t pathTmp = scan.path;
   getScanXY(&xTmp, &yTmp);
   uint16_t pppTmp = motor[scan.pixelMotor].pulsePerPixel;
+  bool sShapeTmp = scan.isSShape;
   bool redraw = false;//whole screen refresh
+  uint8_t currentPointTmp = scan.currentPoint;
 
   while(1) {
-    drawScanAreaScreen(buttons, 6, background, xTmp, yTmp, pppTmp, pathTmp);
+    drawScanAreaScreen(buttons, 7, background, xTmp, yTmp, pppTmp, pathTmp, sShapeTmp, currentPointTmp);
     setDrawTimeFormat(9, 0, TFT_SKYBLUE, background, 2);
     drawTime();
     redraw = false;
     while(!redraw) {
       refreshTime();
-      switch(getButtonPressed(buttons, 6)) {
+      switch(getButtonPressed(buttons, 11)) {
         case 0:
           xTmp = getIntegerScreen("X:");
           redraw = true;
@@ -451,26 +468,49 @@ void scanAreaScreen() {
           freshScanAreaArrowMatrix(background, xTmp, yTmp, pathTmp);
           break;
         case 3:
+          sShapeTmp = !sShapeTmp;
+          freshScanAreaSShape(sShapeTmp, background);
+          break;
+        case 4:
           pppTmp = getIntegerScreen(F("Pulse Per Pixel:"));
           redraw = true;
           break;
-        case 4:
+        case 5:
           return;
           break;
-        case 5:
+        case 6:
           setScanXY(xTmp, yTmp);
           scan.path = pathTmp;
           motor[scan.pixelMotor].pulsePerPixel = pppTmp;
           motor[scan.lineMotor].pulsePerPixel = pppTmp;
+          scan.isSShape = sShapeTmp;
+          scan.currentPoint = currentPointTmp;
           return;
+          break;
+        case 7:
+          currentPointTmp = 0;
+          freshScanAreaCurrentPoint(currentPointTmp, xTmp, yTmp, background);
+          break;
+        case 8:
+          currentPointTmp = 1;
+          freshScanAreaCurrentPoint(currentPointTmp, xTmp, yTmp, background);
+          break;
+        case 9:
+          currentPointTmp = 2;
+          freshScanAreaCurrentPoint(currentPointTmp, xTmp, yTmp, background);
+          break;
+        case 10:
+          currentPointTmp = 3;
+          freshScanAreaCurrentPoint(currentPointTmp, xTmp, yTmp, background);
           break;
       }
     }
   }
 }
-void drawScanAreaScreen(Button* buttons, int size, uint16_t background, uint16_t x, uint16_t y, uint16_t pulsePerPixel, uint8_t path) {
+void drawScanAreaScreen(Button* buttons, int size, uint16_t background, uint16_t x, uint16_t y, uint16_t pulsePerPixel, uint8_t path, bool isSShape, uint8_t currentPoint) {
   float ratio = (float)150 / max(x,y);
   tft.fillScreen(background);
+  tft.drawRect(9, 109, ratio*x, ratio*y, getFrontColor(background));
   drawArrowMatrix(9, 109, ratio*x, ratio*y, path, getFrontColor(background), 15);
   tft.setTextColor(getFrontColor(background));
   tft.setTextSize(2);
@@ -485,9 +525,18 @@ void drawScanAreaScreen(Button* buttons, int size, uint16_t background, uint16_t
   tft.drawString("Total time:", 9, 24);
   tft.setTextColor(TFT_SKYBLUE);
   // TODO:Not accurate
-  long totalSeconds = ((long)x * y * motor[scan.pixelMotor].pulsePerPixel * motor[scan.pixelMotor].intervalTime 
-                          + y * motor[scan.lineMotor].pulsePerPixel * motor[scan.lineMotor].intervalTime) / 1000000 * (2 - scan.isSShape);//calculate based on motor movement time
+  long totalSeconds = ((long)x * y * pulsePerPixel * motor[scan.pixelMotor].intervalTime 
+                          + y * pulsePerPixel * motor[scan.lineMotor].intervalTime) / 1000000 * (2 - scan.isSShape);//calculate based on motor movement time
   tft.drawString(String((int)floor(totalSeconds/3600))+"h "+String((int)floor(totalSeconds/60%60))+"m "+String(totalSeconds%60)+"s", 9, 44);
+
+  if(isSShape) {
+    tft.setTextColor(THEME_GRN);
+    tft.drawString("S-Shape Enable", 9, 269);
+  } else {
+    tft.setTextColor(TFT_SILVER);
+    tft.drawString("S-Shape Disable", 9, 269);
+  }
+  freshScanAreaCurrentPoint(currentPoint, x, y, background);
 
 }
 void freshScanAreaArrowMatrix(uint16_t background, uint16_t x, uint16_t y, uint8_t path) {
@@ -496,6 +545,79 @@ void freshScanAreaArrowMatrix(uint16_t background, uint16_t x, uint16_t y, uint8
   // Serial.println("X:"+String(ratio*x)+", Y:"+String(ratio*y)+", Path:"+String(path));
   drawArrowMatrix(9, 109, ratio*x, ratio*y, path-1<0 ? 7 : path-1, background, 15);//cover the last arrows
   drawArrowMatrix(9, 109, ratio*x, ratio*y, path, getFrontColor(background), 15);
+}
+void freshScanAreaSShape(bool isSShape, uint16_t background) {
+  if(isSShape) {
+    tft.setTextColor(THEME_GRN, background);
+    tft.drawString("S-Shape Enable ", 9, 269);
+  } else {
+    tft.setTextColor(TFT_SILVER, background);
+    tft.drawString("S-Shape Disable", 9, 269);
+  }
+}
+void freshScanAreaCurrentPoint(uint8_t currentPoint, uint16_t x, uint16_t y, uint16_t background) {
+  float ratio = (float)150 / max(x,y);
+
+  for(int i = 0; i < 4; ++i) {
+    tft.fillSmoothCircle((i == 0 || i == 3) ? 9 : 9 + x*ratio, i <= 1  ? 109 : 109 + y*ratio, 5, background, background);
+  }
+  tft.drawRect(9, 109, ratio*x, ratio*y, getFrontColor(background));
+  tft.fillSmoothCircle((currentPoint == 0 || currentPoint == 3) ? 9 : 9 + x*ratio, currentPoint <= 1  ? 109 : 109 + y*ratio, 5, THEME_ORG, background);
+}
+
+//Sensor select screen
+void sensorScreen() {
+  struct Button buttons[6] =  {
+    {4, 4, 150, 150, "TCS34725", TFT_DARKGREY},
+    {164, 4, 150, 150, "AS73211", TFT_DARKGREY},
+    {4, 164, 150, 150, "AS7341", TFT_DARKGREY},
+    {164, 164, 150, 150, "Reserve", TFT_DARKGREY},
+    {4, 324, 150, 150, "Exit", TFT_DARKGREY},
+    {164, 324, 150, 150, "Save", TFT_DARKGREY},
+  };
+
+  uint16_t background = tft.color565(80, 80, 80);
+  bool redraw = false;
+  Sensor sensorTmp = scan.sensor;
+
+  while(1) {
+    for(int i = 0; i < 3; ++i) {
+      buttons[i].color = TFT_DARKGREY;
+    }
+    buttons[sensorTmp].color = THEME_GRN;
+    drawSensorScreen(buttons, 6, background);
+    redraw = false;
+    while(!redraw) {
+      switch(getButtonPressed(buttons, 6)) {
+        case 0:
+          sensorTmp = TCS34725;
+          redraw = true;
+          break;
+        case 1:
+          sensorTmp = AS73211;
+          redraw = true;
+          break;
+        case 2:
+          sensorTmp = AS7341;
+          redraw = true;
+          break;
+        case 3:
+          // 
+          break;
+        case 4:
+          return;
+          break;
+        case 5:
+          scan.sensor = sensorTmp;
+          return;
+          break;
+      }
+    }
+  }
+}
+void drawSensorScreen(Button* buttons, int size, uint16_t background) {
+  tft.fillScreen(background);
+  drawButtons(buttons, size, background);
 }
 
 //Get integer from touch screen, TODO:change the least bit variation bug
@@ -691,6 +813,7 @@ void drawParam(uint16_t background) {
   float ratio = (float)70 / max(x,y);
   // Serial.println(ratio*x);
   // Serial.println(ratio*y);
+  tft.drawRect(9, 89, ratio*x, ratio*y, color);
   drawArrowMatrix(9, 89, ratio*x, ratio*y, scan.path, color, 5);
   tft.setTextColor(color);
   tft.setTextSize(2);
@@ -701,27 +824,27 @@ void drawParam(uint16_t background) {
 
   // tft.fillSmoothCircle((scan.startPoint == 0 || scan.startPoint == 3) ? 9 : 9 + ratio*x, scan.startPoint <= 1  ? 89 : 89 + ratio*y, 3, TFT_SKYBLUE, background);
   tft.fillSmoothCircle((scan.currentPoint == 0 || scan.currentPoint == 3) ? 9 : 9 + ratio*x, scan.currentPoint <= 1  ? 89 : 89 + ratio*y, 2, THEME_ORG, background);
-  tft.fillSmoothCircle(94, 59, 3, THEME_ORG, background);
+  // tft.fillSmoothCircle(94, 59, 3, THEME_ORG, background);
   // tft.fillSmoothCircle(94, 74, 3, TFT_SKYBLUE, background);
   tft.setTextSize(1);
-  tft.setTextColor(TFT_SILVER);
+  tft.setTextColor(THEME_ORG);
   tft.setTextDatum(ML_DATUM);
-  tft.drawString("Current", 100, 60);
+  // tft.drawString("Current", 100, 60);
   // tft.drawString("Start", 100, 75);
+  tft.drawString(SensorStr[scan.sensor], 94, 139);
 
   tft.setTextColor(color);
   if(scan.isSShape) {
-    tft.setTextColor(TFT_GREEN);
-    tft.drawString("S enable", 94, 149);
+    tft.setTextColor(THEME_GRN);
+    tft.drawString("S Enable", 94, 149);
   } else {
     tft.setTextColor(TFT_SILVER);
-    tft.drawString("S disable", 94, 149);
+    tft.drawString("S Disable", 94, 149);
   }
 }
 
 //Matrix to show on the parameter screen
 void drawArrowMatrix(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint8_t path, uint16_t color, int tipSize) {
-  tft.drawRect(x, y, w, h, color);
 
   // path = 0;
 
@@ -931,6 +1054,7 @@ void setScanMotor() {
   
 }
 
+//TODO:Add more sensors
 void scanTask() {
   tft.fillScreen(TFT_BLACK);
   String dir;
