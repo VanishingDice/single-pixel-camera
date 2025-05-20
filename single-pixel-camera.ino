@@ -70,11 +70,35 @@ enum Sensor {
   SENSOR_ALL
 };
 
+const PROGMEM struct {
+  tcs34725Gain_t tcs34725;
+  IntegrationGain as73211;
+  AS7343_gain_t as7343;
+} sensorGains[] = {
+  {TCS34725_GAIN_1X,  Gain1,    AS7343_GAIN_0_5X},  // 第1行：最低增益组合
+  {TCS34725_GAIN_4X,  Gain2,    AS7343_GAIN_1X},    // 第2行
+  {TCS34725_GAIN_16X, Gain4,    AS7343_GAIN_2X},    // 第3行
+  {TCS34725_GAIN_60X, Gain8,    AS7343_GAIN_4X},    // 第4行
+  {0,                 Gain16,   AS7343_GAIN_8X},    // 第5行（TCS34725无对应增益）
+  {0,                 Gain32,   AS7343_GAIN_16X},   // 第6行
+  {0,                 Gain64,   AS7343_GAIN_32X},   // 第7行
+  {0,                 Gain128,  AS7343_GAIN_64X},   // 第8行
+  {0,                 Gain256,  AS7343_GAIN_128X},  // 第9行
+  {0,                 Gain512,  AS7343_GAIN_256X},  // 第10行
+  {0,                 Gain1024, AS7343_GAIN_512X}, // 第11行
+  {0,                 Gain2048, AS7343_GAIN_1024X},// 第12行（第二列结束）
+  {0,                 0,        AS7343_GAIN_2048X}  // 第13行（仅AS7343有增益）
+};
+struct {
+  uint8_t tcs34725 = 4;
+  uint8_t as73211 = 12;
+  uint8_t as7343 = 13;
+} sensorGainRange;
+
 //Scan data, constantly in the scanning process
 struct ScanParam {
   uint8_t path = 0;
   uint8_t currentPoint = 1;//0:left up, 1:right up, 2:right down, 3:left down
-  // uint8_t startPoint = 2;//TODO:REMOVE
   uint16_t totalLines = 100;  //For movement
   uint16_t pixelsPerLine = 100;
 
@@ -90,8 +114,8 @@ struct ScanParam {
   Sensor sensor = SENSOR_TCS34725;
 
   uint8_t integrationTime = TCS34725_INTEGRATIONTIME_24MS; //Maximum interval*pulsePerPixel
-  tcs34725Gain_t gain = TCS34725_GAIN_60X;
-  //TODO:add more sensors
+  uint8_t gain = 3;
+  uint16_t sensorStep = 999;
 } scan;
 
 struct Button{
@@ -116,9 +140,13 @@ String pathComment[8] = {
 };
 
 //For output gain information
-const char* GainStr[] = {"GAIN_1X","GAIN_4X","GAIN_16X","GAIN_60X"};
+const char* const GainStr[3][13] = {
+  {"1X","4X","16X","60X"},
+  {"1X","2X","4X","8X","16X","32X","64X","128X","256X","512X","1024X","2048X"},
+  {"0.5X","1X","2X","4X","8X","16X","32X","64X","128X","256X","512X","1024X","2048X"}
+};
 
-const char* SensorStr[] = {"TCS34725","AS73211","AS7341"};
+const String SensorStr[3] = {"TCS34725","AS73211","AS7341"};
 
 //
 struct {
@@ -559,7 +587,119 @@ void drawMotorParam(uint16_t xPulsePerPixel, uint16_t xIntervalTime, uint16_t yP
 
 //TODO:
 void gainTimeScreen() {
-  ;
+  struct Button buttons[10] =  {
+    {4, 164, 150, 70, "Gain", TFT_DARKGREY},
+    {164, 164, 150, 70, "Time", TFT_DARKGREY},
+    {4, 244, 70, 70, "-", TFT_DARKGREY},
+    {84, 244, 70, 70, "+", TFT_DARKGREY},
+    {164, 244, 70, 70, "-", TFT_DARKGREY},
+    {244, 244, 70, 70, "+", TFT_DARKGREY},
+    {4, 324, 150, 70, "Step", TFT_DARKGREY},
+    {164, 324, 150, 70, "Test", TFT_DARKGREY},
+    {4, 404, 150, 70, "Exit", TFT_DARKGREY},
+    {164, 404, 150, 70, "Save", TFT_DARKGREY},
+  };
+
+  uint16_t background = tft.color565(80, 80, 80);
+  bool redraw = false;
+  uint8_t gainTmp = scan.gain;
+  uint8_t timeTmp = scan.integrationTime;
+  uint16_t stepTmp = scan.sensorStep;
+
+  while(1) {
+    drawGainTimeScreen(buttons, 10, background, gainTmp, timeTmp, stepTmp);
+    redraw = false;
+    while(!redraw) {
+      switch(getButtonPressed(buttons, 10)) {
+        case 0:
+          gainTmp = getIntegerScreen("Gain:");
+          redraw = true;
+          break;
+        case 1:
+          timeTmp = getIntegerScreen("Time:");
+          redraw = true;
+          break;
+        case 2:
+          if(gainTmp > 0) {
+            --gainTmp;
+          } else {
+            switch(scan.sensor) {
+              case SENSOR_TCS34725:
+                gainTmp = sensorGainRange.tcs34725 - 1;//Start from 0
+                break;
+              case SENSOR_AS73211:
+                gainTmp = sensorGainRange.as73211 - 1;//Start from 0
+                break;
+              case SENSOR_AS7343:
+                gainTmp = sensorGainRange.as7343 - 1;//Start from 0
+                break;
+            }
+          }
+          refreshGainTimeText(background, gainTmp, timeTmp, stepTmp);
+          break;
+        case 3:
+          switch(scan.sensor) {
+            case SENSOR_TCS34725:
+              if(gainTmp >= sensorGainRange.tcs34725 - 1) {
+                gainTmp = 0;
+              } else {
+                ++gainTmp;
+              }
+              break;
+            case SENSOR_AS73211:
+              if(gainTmp >= sensorGainRange.as73211 - 1) {
+                gainTmp = 0;
+              } else {
+                ++gainTmp;
+              }
+              break;
+            case SENSOR_AS7343:
+              if(gainTmp >= sensorGainRange.as7343 - 1) {
+                gainTmp = 0;
+              } else {
+                ++gainTmp;
+              }
+              break;
+          }
+          refreshGainTimeText(background, gainTmp, timeTmp, stepTmp);
+          break;
+        case 8:
+          return;
+          break;
+        case 9:
+          scan.gain = gainTmp;
+          scan.integrationTime = timeTmp;
+          scan.sensorStep = stepTmp;
+          return;
+          break;
+      }
+    }
+  }
+}
+void drawGainTimeScreen(Button* buttons, int size, uint16_t background, uint8_t gain, uint8_t time, uint16_t step) {
+  tft.fillScreen(background);
+  drawButtons(buttons, size, background);
+  refreshGainTimeText(background, gain, time, step);
+}
+void refreshGainTimeText(uint16_t background, uint8_t gain, uint8_t time, uint16_t step) {
+  tft.setTextSize(3);
+  tft.setTextDatum(TL_DATUM);
+  tft.setTextColor(getFrontColor(background), background);
+  // Serial.println(scan.sensor);
+  // Serial.println(gain);
+  // Serial.println(GainStr[scan.sensor][gain]);
+  tft.drawString("Gain:"+String(GainStr[scan.sensor][gain])+"   ", 9, 9);
+  // switch(scan.sensor) {
+  //   case TCS34725:
+  //     tft.drawString("Time:"+, 9, 9);
+  //     break;
+  //   case AS73211:
+  //     ;
+  //     break;
+  //   case AS7343:
+  //     ;
+  //     break;
+  // }
 }
 
 //Scan Area Setting
@@ -1012,7 +1152,7 @@ void drawParam(uint16_t background) {
 
   tft.drawString("Gain:", 169, 19);
   tft.setTextColor(THEME_ORG);
-  tft.drawString(String(GainStr[scan.gain]), 169, 39);
+  tft.drawString(String(GainStr[0][scan.gain]), 169, 39);//TODO:
   tft.setTextColor(color);
   tft.drawString("Time:", 169, 59);
   tft.setTextColor(THEME_ORG);
@@ -1329,7 +1469,7 @@ void scanTask() {
   tcs34725.setIntegrationTime(scan.integrationTime);
   Serial.println(String(256-scan.integrationTime)+" cycles, "+String((256-scan.integrationTime)*12/5)+"ms.");
   tcs34725.setGain(scan.gain);
-  Serial.println(GainStr[scan.gain]);
+  Serial.println(GainStr[0][scan.gain]);
 
 
   enableTimer();
