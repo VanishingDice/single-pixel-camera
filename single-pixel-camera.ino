@@ -19,6 +19,8 @@ Jimmy Zhang
 #include <TimerOne.h>
 #include <ResistiveTouchScreen.h>
 #include <DS3231.h>
+#include <AMS_OSRAM_AS7343.h>
+#include <AS73211.h>
 
 //Pin definition
 #define MOTOR_HORIZONTAL 0
@@ -36,6 +38,9 @@ Jimmy Zhang
 #define VERTICAL_INTERVAL_TIME 320
 #define HORIZONTAL_PULSE_PER_PIXEL 80 //Minimum 80 for 1204 and TCS34725, 4 microstep
 #define VERTICAL_PULSE_PER_PIXEL 80
+#define JOYSTICK_X A5
+#define JOYSTICK_Y A6
+#define JOYSTICK_SW A7
 
 // #define THEME_TIME TFT_SKYBLUE
 #define THEME_ORG tft.color565(255, 180, 80)
@@ -59,9 +64,9 @@ struct {
 } timer;
 
 enum Sensor {
-  TCS34725,
-  AS73211,
-  AS7341, 
+  SENSOR_TCS34725,
+  SENSOR_AS73211,
+  SENSOR_AS7343,
   SENSOR_ALL
 };
 
@@ -82,7 +87,7 @@ struct ScanParam {
 
   bool isSShape = false;
 
-  Sensor sensor = TCS34725;
+  Sensor sensor = SENSOR_TCS34725;
 
   uint8_t integrationTime = TCS34725_INTEGRATIONTIME_24MS; //Maximum interval*pulsePerPixel
   tcs34725Gain_t gain = TCS34725_GAIN_60X;
@@ -140,7 +145,9 @@ File bmp;
 File raw;
 File name;
 LiquidCrystal_I2C lcd(0x27, 16, 2);
-Adafruit_TCS34725 tcs = Adafruit_TCS34725(TCS34725_INTEGRATIONTIME_24MS, TCS34725_GAIN_60X);
+Adafruit_TCS34725 tcs34725 = Adafruit_TCS34725(TCS34725_INTEGRATIONTIME_24MS, TCS34725_GAIN_60X);
+AMS_OSRAM_AS7343 as7343;
+AS73211 as73211 = AS73211(0x74);//TODO:change address
 TFT_eSPI tft = TFT_eSPI();//needs to be 4-wire mode, but don't connect MISO
 VTI7064 vti = VTI7064(9);
 ResistiveTouchScreen touch = ResistiveTouchScreen();
@@ -167,6 +174,7 @@ static int bmpHead[54] = {
 //temp var
 uint16_t i;
 uint8_t lineTemp[1000][3];//for S shape invert, order:BGR
+uint16_t AS7343Readings[18];
 
 
 void setup() {
@@ -181,6 +189,11 @@ void setup() {
   lcd.setCursor(0, 0);
   lcd.print("Hello!");
   Serial.println("LCD initialization done.");
+
+  //Joystick
+  pinMode(JOYSTICK_X, INPUT);
+  pinMode(JOYSTICK_Y, INPUT);
+  pinMode(JOYSTICK_SW, INPUT_PULLUP);
 
   //#EN of TXB0108
   pinMode(26, OUTPUT);
@@ -210,10 +223,26 @@ void setup() {
     Serial.println("SRAM initialization done.");
   }
 
-  if (!tcs.begin()) {
-    Serial.println("Color sensor initialization failed!");
+  //Color sensors---------------------------------------
+  if (!tcs34725.begin()) {
+    Serial.println("TCS34725 initialization failed!");
   } else {
-    Serial.println("Color sensor initialization done.");
+    Serial.println("TCS34725 initialization done.");
+  }
+
+  if (!as7343.begin()) {
+    Serial.println("AS7343 initialization failed!");
+  } else {
+    as7343.setATIME(100);
+    as7343.setASTEP(999);
+    as7343.setGain(AS7343_GAIN_64X);
+    Serial.println("AS7343 initialization done.");
+  }
+
+  if(!as73211.begin()) {
+    Serial.println("AS73211 initialization failed!");
+  } else {
+    Serial.println("AS73211 initialization done.");
   }
 
   setDrawTimeFormat(9, 0, TFT_SKYBLUE, TFT_BLACK, 2);
@@ -319,9 +348,9 @@ void drawScanScreen(Button* buttons, int size, uint16_t background) {
 
 //Setting
 void settingScreen() {
-  struct Button buttons[6] =  {
+  struct Button buttons[7] =  {
     {4, 164, 150, 70, "Scan Area", TFT_DARKGREY},
-    // {164, 164, 150, 70, "Scan Path", TFT_DARKGREY},
+    {164, 164, 150, 70, "Gain,Time", TFT_DARKGREY},
     {4, 244, 150, 70, "Filename", TFT_DARKGREY},
     {164, 244, 150, 70, "Storage", TFT_DARKGREY},
     {4, 324, 150, 70, "Motor", TFT_DARKGREY},
@@ -334,32 +363,39 @@ void settingScreen() {
   int pressed = -1;
 
   while(1) {
-    drawSettingScreen(buttons, 6, background);
+    drawSettingScreen(buttons, 7, background);
     setDrawTimeFormat(9, 0, TFT_SKYBLUE, background, 2);
     drawTime();
     redraw = false;
     while(!redraw) {
       refreshTime();
-      pressed = getButtonPressed(buttons, 6);
+      pressed = getButtonPressed(buttons, 7);
       switch(pressed) {
         case 0:
           scanAreaScreen();
           redraw = true;
           break;
         case 1:
-          // 
+          gainTimeScreen();
+          redraw = true;
           break;
         case 2:
-          // 
+          filenameScreen();
+          redraw = true; 
           break;
         case 3:
-          // 
+          storageScreen();
+          redraw = true; 
           break;
         case 4:
+          motorScreen();
+          redraw = true;
+          break;
+        case 5:
           sensorScreen();
           redraw = true; 
           break;
-        case 5:
+        case 6:
           return;
           break;
       }
@@ -372,48 +408,152 @@ void drawSettingScreen(Button* buttons, int size, uint16_t background) {
   drawButtons(buttons, size, background);
 }
 
-//TODO:
+//
 void moveScreen() {
-  struct Button buttons[] = {
-    {4, 164, 150, 150, "Scan", THEME_GRN},
+  enableTimer();
+  struct Button buttons[6] =  {
+    {109, 4, 100, 100, "UP", TFT_DARKGREY},
+    {4, 109, 100, 100, "Left", TFT_DARKGREY},
+    {109, 109, 100, 100, "", TFT_DARKGREY},
+    {214, 109, 100, 100, "Right", TFT_DARKGREY},
+    {109, 214, 100, 100, "Down", TFT_DARKGREY},
+    {9, 394, 300, 80, "Exit", TFT_DARKGREY},
   };
 
-  uint16_t background = tft.color565(50, 50, 50);
+  uint16_t background = tft.color565(80, 80, 80);
+  bool redraw = false;
 
-  // drawScreen(buttons, 0 , background);
-  setDrawTimeFormat(9, 0, TFT_SKYBLUE, background, 2);
-  drawTime();
+  int joystick_x = 0;
+  int joystick_y = 0;
 
-  bool exit = false;
   while(1) {
-    refreshTime();
-    switch(getButtonPressed(buttons, 0)) {
-      case 0:
-        ;
-        exit = true;
-        break;
-      case 1:
-        ;
-        exit = true;
-        break;
-      case 2:
-        ;
-        exit = true;
-        break;
-      case 3:
-        ;
-        exit = true;
-        break;
-    }
-    if(exit) {
-      break;
+    drawMoveScreen(buttons, 6, background);
+    redraw = false;
+    while(!redraw) {
+      getJoystick(&joystick_x, &joystick_y);
+      if(joystick_x != 0) {
+        setMove(MOTOR_HORIZONTAL, joystick_x*MOTOR_FORWARD, 0);
+        movePixel(1);
+      }
+      if(joystick_y != 0) {
+        setMove(MOTOR_VERTICAL, joystick_y*MOTOR_FORWARD, 0);
+        movePixel(1);
+      }
+
+      switch(getButtonPressed(buttons, 6)) {
+        case 0:
+          setMove(MOTOR_VERTICAL, MOTOR_FORWARD, 0);
+          movePixel(1);
+          break;
+        case 1:
+          setMove(MOTOR_HORIZONTAL, MOTOR_FORWARD, 0);
+          movePixel(1);
+          break;
+        case 2:
+          break;
+        case 3:
+          setMove(MOTOR_HORIZONTAL, MOTOR_BACKWARD, 0);
+          movePixel(1);
+          break;
+        case 4:
+          setMove(MOTOR_VERTICAL, MOTOR_BACKWARD, 0);
+          movePixel(1);
+          break;
+        case 5:
+          disableTimer();
+          return;
+          break;
+      }
     }
   }
+}
+void drawMoveScreen(Button* buttons, int size, uint16_t background) {
+  tft.fillScreen(background);
+  drawButtons(&buttons[5], 1, background);
+  tft.fillTriangle(159, 19, 119, 89, 199, 89, getFrontColor(background));  // {109, 4, 100, 100, "UP", TFT_DARKGREY},
+  tft.fillTriangle(19, 159, 89, 119, 89, 199, getFrontColor(background));  // {4, 109, 100, 100, "Left", TFT_DARKGREY},
+  tft.fillSmoothCircle(159, 159, 40, getFrontColor(background), background);  // {109, 109, 100, 100, "", TFT_DARKGREY},
+  tft.fillTriangle(299, 159, 229, 119, 229, 199, getFrontColor(background));  // {214, 109, 100, 100, "Right", TFT_DARKGREY},
+  tft.fillTriangle(159, 299, 119, 229, 199, 229, getFrontColor(background));  // {109, 214, 100, 100, "Down", TFT_DARKGREY},
 }
 
 //TODO:
 void imageScreen() {
   tft.fillScreen(TFT_SKYBLUE);
+}
+
+//TODO:
+void storageScreen() {
+  ;
+}
+
+//
+void motorScreen() {
+  struct Button buttons[6] = {
+    {4, 244, 150, 70, "xPPP", TFT_SKYBLUE},
+    {164, 244, 150, 70, "xIT", TFT_SKYBLUE},
+    {4, 324, 150, 70, "yPPP", TFT_SKYBLUE},
+    {164, 324, 150, 70, "yIT", TFT_SKYBLUE},
+    {4, 404, 150, 70, "Exit", TFT_SKYBLUE},
+    {164, 404, 150, 70, "Save", TFT_SKYBLUE},
+  };
+
+  uint16_t background = tft.color565(50, 50, 50);
+  bool redraw = false;
+  uint16_t xppp, xit, yppp, yit;//Pulse per pixel, interval time
+  xppp = motor[MOTOR_HORIZONTAL].pulsePerPixel;//TODO:Change name to more formal
+  xit = motor[MOTOR_HORIZONTAL].intervalTime;
+  yppp = motor[MOTOR_VERTICAL].pulsePerPixel;
+  yit = motor[MOTOR_VERTICAL].intervalTime;
+
+
+  while(1) {
+    drawMotorScreen(buttons, 6, background, xppp, xit, yppp, yit);
+    redraw = false;
+    while(!redraw) {
+      switch(getButtonPressed(buttons, 6)) {
+        case 0:
+          scanScreen();
+          redraw = true;
+          break;
+        case 1:
+          settingScreen();
+          redraw = true;
+          break;
+        case 2:
+          moveScreen();
+          redraw = true;
+          break;
+        case 3:
+          imageScreen();
+          redraw = true;
+          break;
+        case 4:
+          return;
+          break;
+        case 5:
+          motor[MOTOR_HORIZONTAL].pulsePerPixel = xppp;
+          motor[MOTOR_HORIZONTAL].intervalTime = xit;
+          motor[MOTOR_VERTICAL].pulsePerPixel = yppp;
+          motor[MOTOR_VERTICAL].intervalTime = yit;
+          return;
+          break;
+      }
+    }
+  }
+}
+void drawMotorScreen(Button* buttons, int size, uint16_t background, uint16_t xPulsePerPixel, uint16_t xIntervalTime, uint16_t yPulsePerPixel, uint16_t yIntervalTime ) {
+  tft.fillScreen(background);
+  drawMotorParam(xPulsePerPixel, xIntervalTime, yPulsePerPixel, yIntervalTime, background);
+  drawButtons(buttons, size, background);
+}
+void drawMotorParam(uint16_t xPulsePerPixel, uint16_t xIntervalTime, uint16_t yPulsePerPixel, uint16_t yIntervalTime, uint16_t background) {
+
+}
+
+//TODO:
+void gainTimeScreen() {
+  ;
 }
 
 //Scan Area Setting
@@ -590,15 +730,15 @@ void sensorScreen() {
     while(!redraw) {
       switch(getButtonPressed(buttons, 6)) {
         case 0:
-          sensorTmp = TCS34725;
+          sensorTmp = SENSOR_TCS34725;
           redraw = true;
           break;
         case 1:
-          sensorTmp = AS73211;
+          sensorTmp = SENSOR_AS73211;
           redraw = true;
           break;
         case 2:
-          sensorTmp = AS7341;
+          sensorTmp = SENSOR_AS7343;
           redraw = true;
           break;
         case 3:
@@ -618,6 +758,58 @@ void sensorScreen() {
 void drawSensorScreen(Button* buttons, int size, uint16_t background) {
   tft.fillScreen(background);
   drawButtons(buttons, size, background);
+}
+
+//filename setting screen
+void filenameScreen() {
+  struct Button buttons[4] =  {
+    {4, 164, 150, 150, "Time", TFT_DARKGREY},
+    {164, 164, 150, 150, "Set", TFT_DARKGREY},
+    {4, 324, 150, 150, "Exit", TFT_DARKGREY},
+    {164, 324, 150, 150, "Save", TFT_DARKGREY},
+  };
+
+  uint16_t background = tft.color565(80, 80, 80);
+  bool redraw = false;
+  uint16_t filenameTmp = scan.filename;
+
+  while(1) {
+    drawFilenameScreen(buttons, 4, background, filenameTmp);
+    redraw = false;
+    while(!redraw) {
+      switch(getButtonPressed(buttons, 4)) {
+        case 0:
+          filenameTmp = 0;
+          redraw = true;
+          break;
+        case 1:
+          filenameTmp = getIntegerScreen("Filename:");
+          redraw = true;
+          break;
+        case 2:
+          return;
+          break;
+        case 3:
+          scan.filename = filenameTmp;
+          return;
+          break;
+      }
+    }
+  }
+}
+void drawFilenameScreen(Button* buttons, int size, uint16_t background, uint16_t filename) {
+  tft.fillScreen(background);
+  drawButtons(buttons, size, background);
+  tft.setTextColor(getFrontColor(background));
+  tft.setTextSize(3);
+  tft.setTextDatum(TL_DATUM);
+  tft.drawString("Filename:", 24, 24);
+  if(filename == 0) {
+    tft.drawString("<TIME>", 24, 64);
+  } else {
+    tft.drawString(String(filename), 24, 64);
+  }
+  
 }
 
 //Get integer from touch screen, TODO:change the least bit variation bug
@@ -773,6 +965,29 @@ void drawButtons(Button* buttons, int size, uint16_t background) {
                   buttons[size-1].y + (buttons[size-1].h / 2));
     --size;
   }
+}
+
+//return:SW pressed, true for pressed
+bool getJoystick(int* x, int* y) {
+  int tmp = analogRead(JOYSTICK_X);
+  if(tmp > 900) {
+    *x = 1;
+  } else if(tmp < 100) {
+    *x = -1;
+  } else {
+    *x = 0;
+  }
+
+  tmp = analogRead(JOYSTICK_Y);
+  if(tmp > 900) {
+    *y = 1;
+  } else if(tmp < 100) {
+    *y = -1;
+  } else {
+    *y = 0;
+  }
+
+  return analogRead(JOYSTICK_SW)<500 ? true : false;//SW pressed
 }
 
 //parameters on top of main, setting and scan screen
@@ -1101,13 +1316,13 @@ void scanTask() {
   SDWrite16(raw, motor[1].intervalTime);//10-11
   raw.write(scan.integrationTime);    //12
   raw.write(scan.gain);               //13
-  raw.write(0xFF);
+  raw.write(scan.sensor);             //14
   raw.write(0xFF);
 
   //TODO:Test is it work
-  tcs.setIntegrationTime(scan.integrationTime);
+  tcs34725.setIntegrationTime(scan.integrationTime);
   Serial.println(String(256-scan.integrationTime)+" cycles, "+String((256-scan.integrationTime)*12/5)+"ms.");
-  tcs.setGain(scan.gain);
+  tcs34725.setGain(scan.gain);
   Serial.println(GainStr[scan.gain]);
 
 
@@ -1137,7 +1352,8 @@ void scanTask() {
       }
       movePixel(1);
 
-      readColor(&temp.red, &temp.green, &temp.blue);
+      //TODO:More sensors
+      readColor(&temp.red, &temp.green, &temp.blue, scan.sensor);
 
       //To make sure data is written in right sequence in the array
       if(scan.isSShape && i%2 != 0) {
@@ -1153,9 +1369,17 @@ void scanTask() {
         lineTemp[j][2] = min(temp.red, 255);
         tft.drawPixel(temp.xCursor % 320, temp.yCursor, tft.color565(min(temp.red, 255), min(temp.green, 255), min(temp.blue, 255)));//TODO:use xCursor and yCursor
       }
-      SDWrite16(raw, temp.blue);
-      SDWrite16(raw, temp.green);
-      SDWrite16(raw, temp.red);
+
+      //TODO:AS7343 support
+      if(scan.sensor == SENSOR_TCS34725 || scan.sensor == SENSOR_AS73211) {
+        SDWrite16(raw, temp.blue);
+        SDWrite16(raw, temp.green);
+        SDWrite16(raw, temp.red);
+      } else if(scan.sensor == SENSOR_AS7343) {
+        for(int i = 0; i < 18; ++i) {
+          SDWrite16(raw, AS7343Readings[i]);
+        }
+      }
     }
     delay(100);
 
@@ -1285,10 +1509,31 @@ void setScanXY(uint16_t x, uint16_t y) {
 }
 
 //Sensor----------------------------
-void readColor(uint16_t* red, uint16_t* green, uint16_t* blue) {
-  *red = tcs.read16(TCS34725_RDATAL);
-  *green = tcs.read16(TCS34725_GDATAL);
-  *blue = tcs.read16(TCS34725_BDATAL);
+void readColor(uint16_t* red, uint16_t* green, uint16_t* blue, Sensor sensor) {
+  switch(sensor) {
+    case SENSOR_TCS34725:
+      *red = tcs34725.read16(TCS34725_RDATAL);
+      *green = tcs34725.read16(TCS34725_GDATAL);
+      *blue = tcs34725.read16(TCS34725_BDATAL);
+      break;
+    case SENSOR_AS73211:
+      *red = as73211.color6_readData(_COLOR6_MREG_MEASUREMENT_X_CHANNEL);
+      *green = as73211.color6_readData(_COLOR6_MREG_MEASUREMENT_Y_CHANNEL);
+      *blue = as73211.color6_readData(_COLOR6_MREG_MEASUREMENT_Z_CHANNEL);
+      break;
+    case SENSOR_AS7343:
+      if (!as7343.readAllChannels(AS7343Readings)){
+        Serial.println("Error reading all channels!");
+      }
+      *red = AS7343Readings[9];
+      *green = AS7343Readings[6];
+      *blue = AS7343Readings[1];
+      break;
+    default:
+      Serial.println("Sensor not exist!");
+      break;
+  }
+
 }
 
 //Motor------------------------------
