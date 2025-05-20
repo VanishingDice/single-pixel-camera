@@ -500,42 +500,42 @@ void motorScreen() {
 
   uint16_t background = tft.color565(50, 50, 50);
   bool redraw = false;
-  uint16_t xppp, xit, yppp, yit;//Pulse per pixel, interval time
-  xppp = motor[MOTOR_HORIZONTAL].pulsePerPixel;//TODO:Change name to more formal
-  xit = motor[MOTOR_HORIZONTAL].intervalTime;
-  yppp = motor[MOTOR_VERTICAL].pulsePerPixel;
-  yit = motor[MOTOR_VERTICAL].intervalTime;
+  uint16_t xPulsePerPixelTmp, xIntervalTimeTmp, yPulsePerPixelTmp, yIntervalTimeTmp;//Pulse per pixel, interval time
+  xPulsePerPixelTmp = motor[MOTOR_HORIZONTAL].pulsePerPixel;
+  xIntervalTimeTmp = motor[MOTOR_HORIZONTAL].intervalTime;
+  yPulsePerPixelTmp = motor[MOTOR_VERTICAL].pulsePerPixel;
+  yIntervalTimeTmp = motor[MOTOR_VERTICAL].intervalTime;
 
 
   while(1) {
-    drawMotorScreen(buttons, 6, background, xppp, xit, yppp, yit);
+    drawMotorScreen(buttons, 6, background, xPulsePerPixelTmp, xIntervalTimeTmp, yPulsePerPixelTmp, yIntervalTimeTmp);
     redraw = false;
     while(!redraw) {
       switch(getButtonPressed(buttons, 6)) {
         case 0:
-          scanScreen();
+          xPulsePerPixelTmp = getIntegerScreen("X Pulse Per Pixel:");
           redraw = true;
           break;
         case 1:
-          settingScreen();
+          xIntervalTimeTmp = getIntegerScreen("X Interval Time:");
           redraw = true;
           break;
         case 2:
-          moveScreen();
+          yPulsePerPixelTmp = getIntegerScreen("Y Pulse Per Pixel:");
           redraw = true;
           break;
         case 3:
-          imageScreen();
+          yIntervalTimeTmp = getIntegerScreen("Y Interval Time:");
           redraw = true;
           break;
         case 4:
           return;
           break;
         case 5:
-          motor[MOTOR_HORIZONTAL].pulsePerPixel = xppp;
-          motor[MOTOR_HORIZONTAL].intervalTime = xit;
-          motor[MOTOR_VERTICAL].pulsePerPixel = yppp;
-          motor[MOTOR_VERTICAL].intervalTime = yit;
+          motor[MOTOR_HORIZONTAL].pulsePerPixel = xPulsePerPixelTmp;
+          motor[MOTOR_HORIZONTAL].intervalTime = xIntervalTimeTmp;
+          motor[MOTOR_VERTICAL].pulsePerPixel = yPulsePerPixelTmp;
+          motor[MOTOR_VERTICAL].intervalTime = yIntervalTimeTmp;
           return;
           break;
       }
@@ -548,7 +548,13 @@ void drawMotorScreen(Button* buttons, int size, uint16_t background, uint16_t xP
   drawButtons(buttons, size, background);
 }
 void drawMotorParam(uint16_t xPulsePerPixel, uint16_t xIntervalTime, uint16_t yPulsePerPixel, uint16_t yIntervalTime, uint16_t background) {
-
+  tft.setTextSize(2);
+  tft.setTextDatum(TL_DATUM);
+  tft.setTextColor(getFrontColor(background), background);
+  tft.drawString("x Pulse Per Pixel:"+String(xPulsePerPixel), 9, 9);
+  tft.drawString("x Interval Time:"+String(xIntervalTime), 9, 29);
+  tft.drawString("y Pulse Per Pixel:"+String(yPulsePerPixel), 9, 49);
+  tft.drawString("y Interval Time:"+String(yIntervalTime), 9, 69);
 }
 
 //TODO:
@@ -1645,4 +1651,3 @@ void printColor(int red, int green, int blue) {
   Serial.print("G"); Serial.print(green, DEC); Serial.print(" ");
   Serial.print("B"); Serial.print(blue, DEC); Serial.println(" ");
 }
-
