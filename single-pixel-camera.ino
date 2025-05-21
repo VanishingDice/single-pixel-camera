@@ -113,9 +113,16 @@ struct ScanParam {
 
   Sensor sensor = SENSOR_TCS34725;
 
-  uint8_t integrationTime = TCS34725_INTEGRATIONTIME_24MS; //Maximum interval*pulsePerPixel
-  uint8_t gain = 3;
-  uint16_t sensorStep = 999;
+  //minimum time = pulse per pixel * interval time
+  uint8_t tcs34725Gain = TCS34725_GAIN_60X;//0x03
+  uint8_t tcs34725Time = TCS34725_INTEGRATIONTIME_24MS;//0xF6
+
+  uint8_t as73211Gain = Gain64;//0x50
+  uint8_t as73211Time = Time4ms;//0x02
+
+  uint8_t as7343Gain = AS7343_GAIN_4X;//0x03
+  uint8_t as7343Time = 1;//(1+1)*2.78 = 5.56ms
+  uint16_t as7343Step = 999;//default, each time = 2.78 * (999+1) us = 2.78ms
 } scan;
 
 struct Button{
@@ -602,12 +609,30 @@ void gainTimeScreen() {
 
   uint16_t background = tft.color565(80, 80, 80);
   bool redraw = false;
-  uint8_t gainTmp = scan.gain;
-  uint8_t timeTmp = scan.integrationTime;
-  uint16_t stepTmp = scan.sensorStep;
+  uint8_t gainTmp;
+  uint8_t timeTmp;
+  switch(scan.sensor) {
+    case SENSOR_TCS34725:
+      gainTmp = scan.tcs34725Gain;
+      timeTmp = scan.tcs34725Time;
+      break;
+    case SENSOR_AS73211:
+      gainTmp = scan.as73211Gain;
+      timeTmp = scan.as73211Time;
+      break;
+    case SENSOR_AS7343:
+      gainTmp = scan.as7343Gain;
+      timeTmp = scan.as7343Time;
+      break;
+    case SENSOR_ALL:
+      tft.setTextSize(3);
+      tft.setTextColor(getFrontColor(background));
+      tft.drawString("Sensor could't be sensor_all!", 30, 100);
+      return;
+  }
 
   while(1) {
-    drawGainTimeScreen(buttons, 10, background, gainTmp, timeTmp, stepTmp);
+    drawGainTimeScreen(buttons, 10, background, gainTmp, timeTmp);
     redraw = false;
     while(!redraw) {
       switch(getButtonPressed(buttons, 10)) {
@@ -635,7 +660,7 @@ void gainTimeScreen() {
                 break;
             }
           }
-          refreshGainTimeText(background, gainTmp, timeTmp, stepTmp);
+          refreshGainTimeText(background, gainTmp, timeTmp);
           break;
         case 3:
           switch(scan.sensor) {
@@ -661,27 +686,51 @@ void gainTimeScreen() {
               }
               break;
           }
-          refreshGainTimeText(background, gainTmp, timeTmp, stepTmp);
+          refreshGainTimeText(background, gainTmp, timeTmp);
           break;
+
+        case 4:
+          switch(scan.sensor) {
+            case SENSOR_TCS34725:
+              break;
+            case SENSOR_AS73211:
+              break;
+            case SENSOR_AS7343:
+              break;
+          }
+          break;
+        
+        
         case 8:
           return;
           break;
         case 9:
-          scan.gain = gainTmp;
-          scan.integrationTime = timeTmp;
-          scan.sensorStep = stepTmp;
+          switch(scan.sensor) {
+            case SENSOR_TCS34725:
+              scan.tcs34725Gain = gainTmp;
+              scan.tcs34725Time = timeTmp;
+              break;
+            case SENSOR_AS73211:
+              scan.as73211Gain = gainTmp;
+              scan.as73211Time = timeTmp;
+              break;
+            case SENSOR_AS7343:
+              scan.as7343Gain = gainTmp;
+              scan.as7343Time = timeTmp;
+              break;
+          }
           return;
           break;
       }
     }
   }
 }
-void drawGainTimeScreen(Button* buttons, int size, uint16_t background, uint8_t gain, uint8_t time, uint16_t step) {
+void drawGainTimeScreen(Button* buttons, int size, uint16_t background, uint8_t gain, uint8_t time) {
   tft.fillScreen(background);
   drawButtons(buttons, size, background);
-  refreshGainTimeText(background, gain, time, step);
+  refreshGainTimeText(background, gain, time);
 }
-void refreshGainTimeText(uint16_t background, uint8_t gain, uint8_t time, uint16_t step) {
+void refreshGainTimeText(uint16_t background, uint8_t gain, uint8_t time) {
   tft.setTextSize(3);
   tft.setTextDatum(TL_DATUM);
   tft.setTextColor(getFrontColor(background), background);
@@ -689,17 +738,17 @@ void refreshGainTimeText(uint16_t background, uint8_t gain, uint8_t time, uint16
   // Serial.println(gain);
   // Serial.println(GainStr[scan.sensor][gain]);
   tft.drawString("Gain:"+String(GainStr[scan.sensor][gain])+"   ", 9, 9);
-  // switch(scan.sensor) {
-  //   case TCS34725:
-  //     tft.drawString("Time:"+, 9, 9);
-  //     break;
-  //   case AS73211:
-  //     ;
-  //     break;
-  //   case AS7343:
-  //     ;
-  //     break;
-  // }
+  switch(scan.sensor) {
+    case SENSOR_TCS34725:
+      tft.drawString("Time:"+String(256-time)+"c "+String((256-time)*12/5)+"ms", 9, 49);
+      break;
+    case SENSOR_AS73211:
+      tft.drawString("Time:"+String(pow(2, time))+"ms", 9, 49);
+      break;
+    case SENSOR_AS7343:
+      tft.drawString("Time:"+String(time)+"c "+String((time)*scan.as7343Step*2.78/100)+"ms", 9, 49);;
+      break;
+  }
 }
 
 //Scan Area Setting
@@ -857,7 +906,7 @@ void sensorScreen() {
     {4, 4, 150, 150, "TCS34725", TFT_DARKGREY},
     {164, 4, 150, 150, "AS73211", TFT_DARKGREY},
     {4, 164, 150, 150, "AS7341", TFT_DARKGREY},
-    {164, 164, 150, 150, "Reserve", TFT_DARKGREY},
+    {164, 164, 150, 150, "ALL", TFT_DARKGREY},
     {4, 324, 150, 150, "Exit", TFT_DARKGREY},
     {164, 324, 150, 150, "Save", TFT_DARKGREY},
   };
@@ -888,7 +937,8 @@ void sensorScreen() {
           redraw = true;
           break;
         case 3:
-          // 
+          sensorTmp = SENSOR_ALL;
+          redraw = true;
           break;
         case 4:
           return;
@@ -1152,11 +1202,31 @@ void drawParam(uint16_t background) {
 
   tft.drawString("Gain:", 169, 19);
   tft.setTextColor(THEME_ORG);
-  tft.drawString(String(GainStr[0][scan.gain]), 169, 39);//TODO:
+  switch(scan.sensor) {
+    case SENSOR_TCS34725:
+      tft.drawString(String(GainStr[scan.sensor][scan.tcs34725Gain]), 169, 39);
+      break;
+    case SENSOR_AS73211:
+      tft.drawString(String(GainStr[scan.sensor][scan.as73211Gain]), 169, 39);
+      break;
+    case SENSOR_AS7343:
+      tft.drawString(String(GainStr[scan.sensor][scan.as7343Gain]), 169, 39);
+      break;
+  }
   tft.setTextColor(color);
   tft.drawString("Time:", 169, 59);
   tft.setTextColor(THEME_ORG);
-  tft.drawString(String(256-scan.integrationTime)+"c "+String((256-scan.integrationTime)*12/5)+"ms", 169, 79);
+  switch(scan.sensor) {
+    case SENSOR_TCS34725:
+      tft.drawString("Time:"+String(256-scan.tcs34725Time)+"c "+String((256-scan.tcs34725Time)*12/5)+"ms", 9, 49);
+      break;
+    case SENSOR_AS73211:
+      tft.drawString("Time:"+String(pow(2, scan.as73211Time))+"ms", 9, 49);
+      break;
+    case SENSOR_AS7343:
+      tft.drawString("Time:"+String(scan.as7343Time)+"c "+String((scan.as7343Time)*scan.as7343Step*2.78/100)+"ms", 9, 49);;
+      break;
+  }
   tft.setTextColor(color);
   tft.drawString("Total time:", 169, 99);
   tft.setTextColor(TFT_SKYBLUE);
@@ -1452,24 +1522,44 @@ void scanTask() {
   dir.concat(".raw");
   raw = SD.open(dir, FILE_WRITE);
   //Meta data, total 16 byte, 
-  SDWrite16(raw, scan.pixelsPerLine); //0-1 pixelsPerLine
-  SDWrite16(raw, scan.totalLines);    //2-3 totalLines
-  raw.write(scan.path);               //4   path
-  raw.write(scan.isSShape);           //5   S-Shape(1 for yes)
-  raw.write(motor[0].pulsePerPixel);  //6   motor0 pulsePerPixel
+  SDWrite16(raw, scan.pixelsPerLine);   //0-1 pixelsPerLine
+  SDWrite16(raw, scan.totalLines);      //2-3 totalLines
+  raw.write(scan.path);                 //4   path
+  raw.write(scan.isSShape);             //5   S-Shape(1 for yes)
+  raw.write(motor[0].pulsePerPixel);    //6   motor0 pulsePerPixel
   SDWrite16(raw, motor[0].intervalTime);//7-8
-  raw.write(motor[1].pulsePerPixel);  //9
+  raw.write(motor[1].pulsePerPixel);    //9
   SDWrite16(raw, motor[1].intervalTime);//10-11
-  raw.write(scan.integrationTime);    //12
-  raw.write(scan.gain);               //13
-  raw.write(scan.sensor);             //14
-  raw.write(0xFF);
+  raw.write(scan.sensor);               //12
+  raw.write(scan.tcs34725Time);         //13
+  raw.write(scan.tcs34725Gain);         //14
+  raw.write(scan.as73211Time);          //15
+  raw.write(scan.as73211Gain);          //16
+  raw.write(scan.as7343Time);           //17
+  raw.write(scan.as7343Gain);           //18
+  raw.write(0xFF);                      //19
+  raw.write(0xFF);                      //20
+  raw.write(0xFF);                      //21
+  raw.write(0xFF);                      //22
+  raw.write(0xFF);                      //23
+  raw.write(0xFF);                      //24
+  raw.write(0xFF);                      //25
+  raw.write(0xFF);                      //26
+  raw.write(0xFF);                      //27
+  raw.write(0xFF);                      //28
+  raw.write(0xFF);                      //29
+  raw.write(0xFF);                      //30
+  raw.write(0xFF);                      //31
 
   //TODO:Test is it work
-  tcs34725.setIntegrationTime(scan.integrationTime);
-  Serial.println(String(256-scan.integrationTime)+" cycles, "+String((256-scan.integrationTime)*12/5)+"ms.");
-  tcs34725.setGain(scan.gain);
-  Serial.println(GainStr[0][scan.gain]);
+  tcs34725.setIntegrationTime(scan.tcs34725Time);
+  // Serial.println(String(256-scan.integrationTime)+" cycles, "+String((256-scan.integrationTime)*12/5)+"ms.");
+  tcs34725.setGain(scan.tcs34725Gain);
+  // Serial.println(GainStr[0][scan.gain]);
+  as73211.setGainAndTime(scan.as73211Gain, scan.as73211Time);
+  as7343.setASTEP(scan.as7343Step);
+  as7343.setATIME(scan.as7343Time);
+  as7343.setGain(scan.as7343Gain);
 
 
   enableTimer();
@@ -1790,4 +1880,16 @@ void printColor(int red, int green, int blue) {
   Serial.print("R"); Serial.print(red, DEC); Serial.print(" ");
   Serial.print("G"); Serial.print(green, DEC); Serial.print(" ");
   Serial.print("B"); Serial.print(blue, DEC); Serial.println(" ");
+}
+
+long pow(int x, int y) {
+  long result = 1;
+  if(y == 0) {
+    return 1;
+  }
+  while(y > 0) {
+    result *= x;
+    --y;
+  }
+  return result;
 }
