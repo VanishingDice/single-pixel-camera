@@ -113,14 +113,15 @@ struct ScanParam {
 
   Sensor sensor = SENSOR_TCS34725;
 
+  //Gain store as array index, time store as actual value to set in the function
   //minimum time = pulse per pixel * interval time
-  uint8_t tcs34725Gain = TCS34725_GAIN_60X;//0x03
+  uint8_t tcs34725Gain = 3;//0x03, TCS34725_GAIN_60X
   uint8_t tcs34725Time = TCS34725_INTEGRATIONTIME_24MS;//0xF6
 
-  uint8_t as73211Gain = Gain64;//0x50
+  uint8_t as73211Gain = 6;//0x50, Gain64
   uint8_t as73211Time = Time4ms;//0x02
 
-  uint8_t as7343Gain = AS7343_GAIN_4X;//0x03
+  uint8_t as7343Gain = 3;//0x03, AS7343_GAIN_4X
   uint8_t as7343Time = 1;//(1+1)*2.78 = 5.56ms
   uint16_t as7343Step = 999;//default, each time = 2.78 * (999+1) us = 2.78ms
 } scan;
@@ -153,7 +154,7 @@ const char* const GainStr[3][13] = {
   {"0.5X","1X","2X","4X","8X","16X","32X","64X","128X","256X","512X","1024X","2048X"}
 };
 
-const String SensorStr[3] = {"TCS34725","AS73211","AS7341"};
+const String SensorStr[4] = {"TCS34725","AS73211","AS7341","All Sensor"};
 
 //
 struct {
@@ -221,8 +222,10 @@ void setup() {
 
   lcd.begin(16, 2);
   lcd.backlight();
-  lcd.setCursor(0, 0);
-  lcd.print("Hello!");
+  lcd.setCursor(2, 0);
+  lcd.print("Single Pixel");
+  lcd.setCursor(5, 1);
+  lcd.print("Camera");
   Serial.println("LCD initialization done.");
 
   //Joystick
@@ -609,8 +612,10 @@ void gainTimeScreen() {
 
   uint16_t background = tft.color565(80, 80, 80);
   bool redraw = false;
-  uint8_t gainTmp;
+  uint8_t gainTmp;//don't change the data type
   uint8_t timeTmp;
+  uint8_t stepTmp;
+  //Init value
   switch(scan.sensor) {
     case SENSOR_TCS34725:
       gainTmp = scan.tcs34725Gain;
@@ -623,11 +628,18 @@ void gainTimeScreen() {
     case SENSOR_AS7343:
       gainTmp = scan.as7343Gain;
       timeTmp = scan.as7343Time;
+      stepTmp = scan.as7343Step;
       break;
     case SENSOR_ALL:
+      tft.fillScreen(background);
       tft.setTextSize(3);
       tft.setTextColor(getFrontColor(background));
-      tft.drawString("Sensor could't be sensor_all!", 30, 100);
+      tft.drawString("Function", 30, 80);
+      tft.drawString("Not", 30, 120);
+      tft.drawString("Available", 30, 160);
+      tft.drawString("When", 30, 200);
+      tft.drawString("Sensor_all", 30, 240);
+      delay(1000);
       return;
   }
 
@@ -688,19 +700,80 @@ void gainTimeScreen() {
           }
           refreshGainTimeText(background, gainTmp, timeTmp);
           break;
-
         case 4:
           switch(scan.sensor) {
             case SENSOR_TCS34725:
+              ++timeTmp;//2.4~614ms 255~0 unsigned so don't have to check bound(maybe?)
               break;
             case SENSOR_AS73211:
+              //1~16384ms 255~0 unsigned so don't have to check bound(maybe?)
+              if(timeTmp == 0) {
+                timeTmp = 0x0E;
+              } else {
+                --timeTmp;
+              }
               break;
             case SENSOR_AS7343:
+              --timeTmp;//2.78~711ms 0~255 unsigned so don't have to check bound(maybe?)
               break;
           }
+          refreshGainTimeText(background, gainTmp, timeTmp);
           break;
-        
-        
+        case 5:
+          switch(scan.sensor) {
+            case SENSOR_TCS34725:
+              --timeTmp;//2.4~614ms 255~0 unsigned so don't have to check bound(maybe?)
+              break;
+            case SENSOR_AS73211:
+              //1~16384ms 255~0 unsigned so don't have to check bound(maybe?)
+              if(timeTmp == 0x0E) {
+                timeTmp = 0;
+              } else {
+                ++timeTmp;
+              }
+              break;
+            case SENSOR_AS7343:
+              ++timeTmp;//2.78~711ms 0~255 unsigned so don't have to check bound(maybe?)
+              break;
+          }
+          refreshGainTimeText(background, gainTmp, timeTmp);
+          break;
+        case 6:
+          if(scan.sensor == SENSOR_AS7343) {
+            stepTmp = getIntegerScreen("Step:");
+          }
+          redraw = true;
+          break;
+        case 7:
+          tcs34725.setIntegrationTime(scan.tcs34725Time);
+          tcs34725.setGain(sensorGains[scan.tcs34725Gain].tcs34725);
+          as73211.setGainAndTime(sensorGains[scan.as73211Gain].as73211, scan.as73211Time);
+          as7343.setASTEP(scan.as7343Step);
+          as7343.setATIME(scan.as7343Time);
+          as7343.setGain(sensorGains[scan.as7343Gain].as7343);
+          switch(scan.sensor) {
+            case SENSOR_TCS34725:
+              tcs34725.setIntegrationTime(timeTmp);
+              tcs34725.setGain(sensorGains[gainTmp].tcs34725);
+              break;
+            case SENSOR_AS73211:
+              as73211.setGainAndTime(sensorGains[gainTmp].as73211, timeTmp);
+              break;
+            case SENSOR_AS7343:
+              as7343.setASTEP(stepTmp);
+              as7343.setATIME(timeTmp);
+              as7343.setGain(sensorGains[gainTmp].as7343);
+              break;
+          }
+
+          uint16_t r,g,b;
+          readColor(&r, &g, &b, scan.sensor);
+          tft.fillRect(244, 84, 70, 30, tft.color565(min(r, 255), min(g, 255), min(b, 255)));
+          tft.setTextSize(2);
+          tft.setTextColor(getFrontColor(background), background);
+          tft.setTextDatum(TL_DATUM);
+          tft.drawString("R"+String(r)+" G"+String(g)+" B"+String(b)+"                                                ", 4, 134);
+          break;
         case 8:
           return;
           break;
@@ -717,6 +790,7 @@ void gainTimeScreen() {
             case SENSOR_AS7343:
               scan.as7343Gain = gainTmp;
               scan.as7343Time = timeTmp;
+              scan.as7343Step = stepTmp;
               break;
           }
           return;
@@ -914,13 +988,14 @@ void sensorScreen() {
   uint16_t background = tft.color565(80, 80, 80);
   bool redraw = false;
   Sensor sensorTmp = scan.sensor;
+  drawSensorScreen(buttons, 6, background);
 
   while(1) {
-    for(int i = 0; i < 3; ++i) {
+    for(int i = 0; i < 4; ++i) {
       buttons[i].color = TFT_DARKGREY;
     }
     buttons[sensorTmp].color = THEME_GRN;
-    drawSensorScreen(buttons, 6, background);
+    refreshSensorButtons(buttons, 6, background);
     redraw = false;
     while(!redraw) {
       switch(getButtonPressed(buttons, 6)) {
@@ -953,6 +1028,9 @@ void sensorScreen() {
 }
 void drawSensorScreen(Button* buttons, int size, uint16_t background) {
   tft.fillScreen(background);
+  // refreshSensorButtons(buttons, size, background);
+}
+void refreshSensorButtons(Button* buttons, int size, uint16_t background) {
   drawButtons(buttons, size, background);
 }
 
@@ -1212,6 +1290,9 @@ void drawParam(uint16_t background) {
     case SENSOR_AS7343:
       tft.drawString(String(GainStr[scan.sensor][scan.as7343Gain]), 169, 39);
       break;
+    case SENSOR_ALL:
+      tft.drawString("<ALL>", 169, 39);
+      break;
   }
   tft.setTextColor(color);
   tft.drawString("Time:", 169, 59);
@@ -1221,10 +1302,13 @@ void drawParam(uint16_t background) {
       tft.drawString(String(256-scan.tcs34725Time)+"c "+String((256-scan.tcs34725Time)*12/5)+"ms", 169, 79);
       break;
     case SENSOR_AS73211:
-      tft.drawString(String(pow(2, scan.as73211Time))+"ms", 9, 79);
+      tft.drawString(String(pow(2, scan.as73211Time))+"ms", 169, 79);
       break;
     case SENSOR_AS7343:
       tft.drawString(String(scan.as7343Time)+"c "+String((scan.as7343Time)*scan.as7343Step*2.78/100)+"ms", 169, 79);;
+      break;
+    case SENSOR_ALL:
+      tft.drawString("<ALL>", 169, 79);;
       break;
   }
   tft.setTextColor(color);
@@ -1554,12 +1638,12 @@ void scanTask() {
   //TODO:Test is it work
   tcs34725.setIntegrationTime(scan.tcs34725Time);
   // Serial.println(String(256-scan.integrationTime)+" cycles, "+String((256-scan.integrationTime)*12/5)+"ms.");
-  tcs34725.setGain(scan.tcs34725Gain);
+  tcs34725.setGain(sensorGains[scan.tcs34725Gain].tcs34725);
   // Serial.println(GainStr[0][scan.gain]);
-  as73211.setGainAndTime(scan.as73211Gain, scan.as73211Time);
+  as73211.setGainAndTime(sensorGains[scan.as73211Gain].as73211, scan.as73211Time);
   as7343.setASTEP(scan.as7343Step);
   as7343.setATIME(scan.as7343Time);
-  as7343.setGain(scan.as7343Gain);
+  as7343.setGain(sensorGains[scan.as7343Gain].as7343);
 
 
   enableTimer();
@@ -1765,6 +1849,10 @@ void readColor(uint16_t* red, uint16_t* green, uint16_t* blue, Sensor sensor) {
       *green = AS7343Readings[6];
       *blue = AS7343Readings[1];
       break;
+    case SENSOR_ALL:
+      *red = tcs34725.read16(TCS34725_RDATAL);
+      *green = tcs34725.read16(TCS34725_GDATAL);
+      *blue = tcs34725.read16(TCS34725_BDATAL);
     default:
       Serial.println("Sensor not exist!");
       break;
