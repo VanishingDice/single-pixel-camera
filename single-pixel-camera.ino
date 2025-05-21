@@ -1218,13 +1218,13 @@ void drawParam(uint16_t background) {
   tft.setTextColor(THEME_ORG);
   switch(scan.sensor) {
     case SENSOR_TCS34725:
-      tft.drawString("Time:"+String(256-scan.tcs34725Time)+"c "+String((256-scan.tcs34725Time)*12/5)+"ms", 9, 49);
+      tft.drawString(String(256-scan.tcs34725Time)+"c "+String((256-scan.tcs34725Time)*12/5)+"ms", 169, 79);
       break;
     case SENSOR_AS73211:
-      tft.drawString("Time:"+String(pow(2, scan.as73211Time))+"ms", 9, 49);
+      tft.drawString(String(pow(2, scan.as73211Time))+"ms", 9, 79);
       break;
     case SENSOR_AS7343:
-      tft.drawString("Time:"+String(scan.as7343Time)+"c "+String((scan.as7343Time)*scan.as7343Step*2.78/100)+"ms", 9, 49);;
+      tft.drawString(String(scan.as7343Time)+"c "+String((scan.as7343Time)*scan.as7343Step*2.78/100)+"ms", 169, 79);;
       break;
   }
   tft.setTextColor(color);
