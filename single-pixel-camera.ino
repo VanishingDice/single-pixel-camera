@@ -522,7 +522,177 @@ void imageScreen() {
 
 //TODO:
 void storageScreen() {
-  ;
+  struct Button buttons[12] =  {
+    {4, 164, 70, 70, "1", TFT_DARKGREY},
+    {84, 164, 70, 70, "2", TFT_DARKGREY},
+    {164, 164, 70, 70, "3", TFT_DARKGREY},
+    {244, 164, 70, 70, "4", TFT_DARKGREY},
+    {4, 244, 70, 70, "5", TFT_DARKGREY},
+    {84, 244, 70, 70, "6", TFT_DARKGREY},
+    {164, 244, 70, 70, "7", TFT_DARKGREY},
+    {244, 244, 70, 70, "8", TFT_DARKGREY},
+    {4, 324, 150, 70, "Delete", TFT_DARKGREY},
+    {164, 324, 150, 70, "Recall", TFT_DARKGREY},
+    {4, 404, 150, 70, "Exit", TFT_DARKGREY},
+    {164, 404, 150, 70, "Save", TFT_DARKGREY},
+  };
+
+  uint16_t background = tft.color565(80, 80, 80);
+  bool redraw = false;
+  int pressed = -1;
+  int select = -1;//selected storage
+
+  ScanParam scanTmp = scan;
+
+  while(1) {
+    drawStorageScreen(buttons, 12, background, scanTmp);
+    setDrawTimeFormat(9, 0, TFT_SKYBLUE, background, 2);
+    drawTime();
+    redraw = false;
+    while(!redraw) {
+      refreshTime();
+      pressed = getButtonPressed(buttons, 12);
+      switch(pressed) {
+        case 0:
+        case 1:
+        case 2:
+        case 3:
+        case 4:
+        case 5:
+        case 6:
+        case 7:
+          for(int i = 0; i < 8; ++i) {
+            buttons[i].color = TFT_DARKGREY;
+          }
+          buttons[pressed].color = THEME_GRN;
+          select = pressed;
+          drawButtons(buttons, 8, background);
+
+          if(isPresetFileExist(pressed)) {
+            scanTmp = readScanParam(pressed);
+            redraw = true; 
+          } else {
+            tft.fillRect(0, 0, 320, 160, background);
+            tft.setTextSize(2);
+            tft.setTextColor(getFrontColor(background));
+            tft.setTextDatum(CC_DATUM);
+            tft.drawString("Preset "+String(select+1)+" doesn't exist.", 159, 79);
+            setDrawTimeFormat(9, 0, TFT_SKYBLUE, background, 2);
+            drawTime();
+          }
+          break;
+        case 8:
+          if(select != -1) {
+            String dir = "storage/";
+            dir.concat(String(select));
+            dir.concat(".dat");
+            SD.remove(dir);
+          }
+          tft.fillRect(0, 0, 320, 160, background);
+          tft.setTextSize(3);
+          tft.setTextColor(getFrontColor(background));
+          tft.setTextDatum(CC_DATUM);
+          tft.drawString("Preset "+String(select+1)+" deleted.", 159, 79);
+          redraw = true;
+          delay(1000);
+          break;
+        case 9:
+          scan = scanTmp;
+          tft.fillRect(0, 0, 320, 160, background);
+          tft.setTextSize(3);
+          tft.setTextColor(getFrontColor(background));
+          tft.setTextDatum(CC_DATUM);
+          tft.drawString("Loaded preset "+String(select+1)+".", 159, 79);
+          redraw = true;
+          delay(1000);
+          return;
+          break;
+        case 10:
+          return;
+          break;
+        case 11:
+          if(select != -1) {
+            writeScanParam(select, scan);
+            tft.fillRect(0, 0, 320, 160, background);
+            tft.setTextSize(3);
+            tft.setTextColor(getFrontColor(background));
+            tft.setTextDatum(CC_DATUM);
+            tft.drawString("Preset "+String(select+1)+" saved.", 159, 79);
+            redraw = true;
+            delay(1000);
+          }
+          break;
+      }
+    }
+  }
+}
+void drawStorageScreen(Button* buttons, int size, uint16_t background, ScanParam scan) {
+  tft.fillScreen(background);
+  drawParam(background, scan);
+  drawButtons(buttons, size, background);
+}
+ScanParam readScanParam(uint8_t filename) {
+  ScanParam scan;
+
+  String dir = "storage/";
+  dir.concat(String(filename));
+  dir.concat(".dat");
+  File file = SD.open(dir, FILE_READ);
+
+  scan.path = file.read();
+  scan.currentPoint = file.read();
+  scan.totalLines = SDRead16(file);
+  scan.pixelsPerLine = SDRead16(file);
+  scan.pixelMotor = file.read();
+  scan.pixelDirection = file.read();
+  scan.lineMotor = file.read();
+  scan.lineDirection = file.read();
+  scan.isSShape = file.read();
+  scan.sensor = file.read();
+  scan.tcs34725Gain = file.read();
+  scan.tcs34725Time = file.read();
+  scan.as73211Gain = file.read();
+  scan.as73211Time = file.read();
+  scan.as7343Gain = file.read();
+  scan.as7343Time = file.read();
+  scan.as7343Step = SDRead16(file);
+
+  file.close();
+
+  return scan;
+
+}
+void writeScanParam(uint8_t filename, ScanParam scan) {
+  String dir = "storage/";
+  dir.concat(String(filename));
+  dir.concat(".dat");
+  File file = SD.open(dir, FILE_WRITE);
+
+  file.write(scan.path);
+  file.write(scan.currentPoint);
+  SDWrite16(file, scan.totalLines);
+  SDWrite16(file, scan.pixelsPerLine);
+  file.write(scan.pixelMotor);
+  file.write(scan.pixelDirection);
+  file.write(scan.lineMotor);
+  file.write(scan.lineDirection);
+  file.write(scan.isSShape);
+  file.write(scan.sensor);
+  file.write(scan.tcs34725Gain);
+  file.write(scan.tcs34725Time);
+  file.write(scan.as73211Gain);
+  file.write(scan.as73211Time);
+  file.write(scan.as7343Gain);
+  file.write(scan.as7343Time);
+  SDWrite16(file, scan.as7343Step);
+
+  file.close();
+}
+bool isPresetFileExist(uint8_t filename) {
+  String dir = "storage/";
+  dir.concat(String(filename));
+  dir.concat(".dat");
+  return SD.exists(dir);
 }
 
 //
@@ -847,7 +1017,7 @@ void scanAreaScreen() {
 
   uint16_t xTmp, yTmp;
   uint8_t pathTmp = scan.path;
-  getScanXY(&xTmp, &yTmp);
+  getScanXY(scan, &xTmp, &yTmp);
   uint16_t pppTmp = motor[scan.pixelMotor].pulsePerPixel;
   bool sShapeTmp = scan.isSShape;
   bool redraw = false;//whole screen refresh
@@ -1265,7 +1435,7 @@ bool getJoystick(int* x, int* y) {
 }
 
 //parameters on top of main, setting and scan screen
-void drawParam(uint16_t background) {
+void drawParam(uint16_t background, ScanParam scan) {
   uint16_t color = getFrontColor(background);
 
   tft.setTextSize(2);
@@ -1324,7 +1494,7 @@ void drawParam(uint16_t background) {
   tft.drawString("Interval time:"+String(motor[scan.pixelMotor].intervalTime)+"us", 169, 149);
 
   uint16_t x, y;
-  getScanXY(&x, &y);
+  getScanXY(scan, &x, &y);
   float ratio = (float)70 / max(x,y);
   // Serial.println(ratio*x);
   // Serial.println(ratio*y);
@@ -1343,7 +1513,7 @@ void drawParam(uint16_t background) {
   // tft.fillSmoothCircle(94, 74, 3, TFT_SKYBLUE, background);
   tft.setTextSize(1);
   tft.setTextColor(THEME_ORG);
-  tft.setTextDatum(ML_DATUM);
+  tft.setTextDatum(TL_DATUM);
   // tft.drawString("Current", 100, 60);
   // tft.drawString("Start", 100, 75);
   tft.drawString(SensorStr[scan.sensor], 94, 139);
@@ -1356,6 +1526,9 @@ void drawParam(uint16_t background) {
     tft.setTextColor(TFT_SILVER);
     tft.drawString("S Disable", 94, 149);
   }
+}
+void drawParam(uint16_t background) {
+  drawParam(background, scan);
 }
 
 //Matrix to show on the parameter screen
@@ -1463,12 +1636,12 @@ void drawArrow(uint16_t x, uint16_t y, int16_t distance, uint8_t dir, uint16_t c
 //Draw current time, used in param screen, isFull to print the whole time, refresh to faster
 void drawTime(bool isFull) {
   now = rtc.now();
+  tft.setTextSize(drawTimeFormat.size);
+  tft.setTextDatum(TL_DATUM);
+  tft.setTextColor(drawTimeFormat.color, drawTimeFormat.background);
 
   if(isFull) {
     drawTimeFormat.textWidth = tft.textWidth(" ");
-    tft.setTextSize(drawTimeFormat.size);
-    tft.setTextDatum(TL_DATUM);
-    tft.setTextColor(drawTimeFormat.color, drawTimeFormat.background);
     tft.drawString("    /  /     :  :", drawTimeFormat.x, drawTimeFormat.y);
   }
 
@@ -1808,7 +1981,7 @@ void computerControl() {
   }
 }
 
-void getScanXY(uint16_t* x, uint16_t* y) {
+void getScanXY(ScanParam scan, uint16_t* x, uint16_t* y) {
   if(scan.path >= 0 && scan.path <= 3) {
     *x = scan.pixelsPerLine;
     *y = scan.totalLines;
@@ -1946,6 +2119,12 @@ void timerInterrupt() {
 void SDWrite16(File file, uint16_t data) {
   file.write(data % 256);//TODO:try | 0xFF
   file.write(floor(data / 256));//TODO:try >>8
+}
+
+uint16_t SDRead16(File file) {
+  uint16_t data = file.read();
+  data += (file.read() << 8);
+  return data;
 }
 
 //Interaction---------------------
