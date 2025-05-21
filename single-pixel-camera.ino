@@ -166,7 +166,6 @@ struct {
   uint8_t textWidth;
 } drawTimeFormat;
 
-//TODO:move to function
 //Data for temp using, various data when scanning
 struct Temp {
   uint16_t xCursor;  //Coordinate of image
@@ -520,7 +519,7 @@ void imageScreen() {
   tft.fillScreen(TFT_SKYBLUE);
 }
 
-//TODO:
+//
 void storageScreen() {
   struct Button buttons[12] =  {
     {4, 164, 70, 70, "1", TFT_DARKGREY},
@@ -765,7 +764,7 @@ void drawMotorParam(uint16_t xPulsePerPixel, uint16_t xIntervalTime, uint16_t yP
   tft.drawString("y Interval Time:"+String(yIntervalTime), 9, 69);
 }
 
-//TODO:
+//
 void gainTimeScreen() {
   struct Button buttons[10] =  {
     {4, 164, 150, 70, "Gain", TFT_DARKGREY},
@@ -1742,7 +1741,7 @@ void setScanMotor() {
   
 }
 
-//TODO:Add more sensors
+//
 void scanTask() {
   tft.fillScreen(TFT_BLACK);
   String dir;
@@ -1808,7 +1807,6 @@ void scanTask() {
   raw.write(0xFF);                      //30
   raw.write(0xFF);                      //31
 
-  //TODO:Test is it work
   tcs34725.setIntegrationTime(scan.tcs34725Time);
   // Serial.println(String(256-scan.integrationTime)+" cycles, "+String((256-scan.integrationTime)*12/5)+"ms.");
   tcs34725.setGain(sensorGains[scan.tcs34725Gain].tcs34725);
@@ -1845,7 +1843,6 @@ void scanTask() {
       }
       movePixel(1);
 
-      //TODO:More sensors
       readColor(&temp.red, &temp.green, &temp.blue, scan.sensor);
 
       //To make sure data is written in right sequence in the array
@@ -1863,7 +1860,6 @@ void scanTask() {
         tft.drawPixel(temp.xCursor % 320, temp.yCursor, tft.color565(min(temp.red, 255), min(temp.green, 255), min(temp.blue, 255)));//TODO:use xCursor and yCursor
       }
 
-      //TODO:AS7343 support
       if(scan.sensor == SENSOR_TCS34725 || scan.sensor == SENSOR_AS73211) {
         SDWrite16(raw, temp.blue);
         SDWrite16(raw, temp.green);
