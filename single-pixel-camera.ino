@@ -25,14 +25,16 @@ Jimmy Zhang
 //Pin definition
 #define MOTOR_HORIZONTAL 0
 #define MOTOR_VERTICAL 1
-#define MOTOR_FORWARD 1//H-->end V-->motor
-#define MOTOR_BACKWARD 0//H-->motor V-->end
+#define MOTOR_FORWARD 0//H-->end V-->end
+#define MOTOR_BACKWARD 1//H-->motor V-->motor
 #define MOTOR_HORIZONTAL_PUL 2
 #define MOTOR_HORIZONTAL_DIR 3
 #define MOTOR_HORIZONTAL_ENA 4
 #define MOTOR_VERTICAL_PUL 5
 #define MOTOR_VERTICAL_DIR 6
 #define MOTOR_VERTICAL_ENA 7
+#define MOTOR_HIGH LOW
+#define MOTOR_LOW HIGH
 //Move parameters
 #define HORIZONTAL_INTERVAL_TIME 320
 #define VERTICAL_INTERVAL_TIME 320
@@ -182,7 +184,7 @@ File name;
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 Adafruit_TCS34725 tcs34725 = Adafruit_TCS34725(TCS34725_INTEGRATIONTIME_24MS, TCS34725_GAIN_60X);
 AMS_OSRAM_AS7343 as7343;
-AS73211 as73211 = AS73211(0x74);//TODO:change address
+AS73211 as73211 = AS73211(0x76);//TODO:change address
 TFT_eSPI tft = TFT_eSPI();//needs to be 4-wire mode, but don't connect MISO
 VTI7064 vti = VTI7064(9);
 ResistiveTouchScreen touch = ResistiveTouchScreen();
@@ -243,7 +245,7 @@ void setup() {
   while(digitalRead(24) == HIGH) {}
   if (!SD.begin(53)) {
     Serial.println("SD initialization failed!");
-    while (1) {}
+    // while (1) {}
   }
   Serial.println("SD initialization done.");
 
@@ -351,6 +353,7 @@ void scanScreen() {
     {164, 324, 150, 150, "Start", TFT_SKYBLUE},
   };
 
+  setScanMotor();
   uint16_t background = tft.color565(200, 255, 200);
   bool redraw = false;
 
@@ -468,12 +471,20 @@ void moveScreen() {
     redraw = false;
     while(!redraw) {
       getJoystick(&joystick_x, &joystick_y);
-      if(joystick_x != 0) {
-        setMove(MOTOR_HORIZONTAL, joystick_x*MOTOR_FORWARD, 0);
+      if(joystick_x > 0) {
+        setMove(MOTOR_HORIZONTAL, MOTOR_BACKWARD, 0);
         movePixel(1);
       }
-      if(joystick_y != 0) {
-        setMove(MOTOR_VERTICAL, joystick_y*MOTOR_FORWARD, 0);
+      if(joystick_x < 0) {
+        setMove(MOTOR_HORIZONTAL, MOTOR_FORWARD, 0);
+        movePixel(1);
+      }
+      if(joystick_y > 0) {
+        setMove(MOTOR_VERTICAL, MOTOR_FORWARD, 0);
+        movePixel(1);
+      }
+      if(joystick_y < 0) {
+        setMove(MOTOR_VERTICAL, MOTOR_BACKWARD, 0);
         movePixel(1);
       }
 
@@ -1711,28 +1722,28 @@ void setScanMotor() {
   switch (scan.path) {
     case 0:
     case 2:
-    case 4:
-    case 6:
+    case 5:
+    case 7:
       scan.pixelDirection = MOTOR_FORWARD;
       break;
     case 1:
     case 3:
-    case 5:
-    case 7:
+    case 4:
+    case 6:
       scan.pixelDirection = MOTOR_BACKWARD;
       break;
   }
 
   //Line direction select
   switch (scan.path) {
-    case 0:
-    case 1:
+    case 2:
+    case 3:
     case 4:
     case 5:
       scan.lineDirection = MOTOR_FORWARD;
       break;
-    case 2:
-    case 3:
+    case 0:
+    case 1:
     case 6:
     case 7:
       scan.lineDirection = MOTOR_BACKWARD;
@@ -1929,8 +1940,8 @@ void moveTask() {
 }
 
 void enableTimer() {
-  digitalWrite(MOTOR_HORIZONTAL_ENA, LOW);
-  digitalWrite(MOTOR_VERTICAL_ENA, LOW);
+  digitalWrite(MOTOR_HORIZONTAL_ENA, MOTOR_LOW);
+  digitalWrite(MOTOR_VERTICAL_ENA, MOTOR_LOW);
   //only for init, not in use
   Timer1.initialize(motor[scan.pixelMotor].intervalTime);
   Serial.println("Timer1.init:"+(String)motor[scan.pixelMotor].intervalTime);
@@ -1943,8 +1954,8 @@ void enableTimer() {
 void disableTimer() {
   while(timer.count < timer.pulsePerPixel) {}
   Timer1.detachInterrupt();
-  digitalWrite(MOTOR_HORIZONTAL_ENA, HIGH);
-  digitalWrite(MOTOR_VERTICAL_ENA, HIGH);
+  digitalWrite(MOTOR_HORIZONTAL_ENA, MOTOR_HIGH);
+  digitalWrite(MOTOR_VERTICAL_ENA, MOTOR_HIGH);
 }
 
 void computerControl() {
@@ -2038,8 +2049,8 @@ void motorSetup() {
   pinMode(MOTOR_VERTICAL_DIR, OUTPUT);
   pinMode(MOTOR_VERTICAL_PUL, OUTPUT);
   pinMode(MOTOR_VERTICAL_ENA, OUTPUT);
-  digitalWrite(MOTOR_HORIZONTAL_ENA, HIGH);
-  digitalWrite(MOTOR_VERTICAL_ENA, HIGH);
+  digitalWrite(MOTOR_HORIZONTAL_ENA, MOTOR_HIGH);
+  digitalWrite(MOTOR_VERTICAL_ENA, MOTOR_HIGH);
 
   //default
   motor[MOTOR_HORIZONTAL].intervalTime = HORIZONTAL_INTERVAL_TIME;
@@ -2054,16 +2065,16 @@ void move(uint8_t which, bool dir, uint64_t totalPulses) {
   if (which == MOTOR_HORIZONTAL) {            //which: '0' means horizontal, '1' means vertical
     digitalWrite(MOTOR_HORIZONTAL_DIR, dir);  //dir: 1 = HIGH, 0 = LOW (in Arduino.h)
     while (totalPulses > 0) {
-      digitalWrite(MOTOR_HORIZONTAL_PUL, HIGH);
-      digitalWrite(MOTOR_HORIZONTAL_PUL, LOW);
+      digitalWrite(MOTOR_HORIZONTAL_PUL, MOTOR_HIGH);
+      digitalWrite(MOTOR_HORIZONTAL_PUL, MOTOR_LOW);
       delayMicroseconds(motor[0].intervalTime);
       totalPulses--;
     }
   } else {
     digitalWrite(MOTOR_VERTICAL_DIR, dir);  //dir: 1 = HIGH, 0 = LOW (in Arduino.h)
     while (totalPulses > 0) {
-      digitalWrite(MOTOR_VERTICAL_PUL, HIGH);
-      digitalWrite(MOTOR_VERTICAL_PUL, LOW);
+      digitalWrite(MOTOR_VERTICAL_PUL, MOTOR_HIGH);
+      digitalWrite(MOTOR_VERTICAL_PUL, MOTOR_LOW);
       delayMicroseconds(motor[1].intervalTime);
       totalPulses--;
     }
@@ -2097,9 +2108,9 @@ void movePixel(uint64_t pixels) {
 
 void timerInterrupt() {
   if (timer.count >= timer.pulsePerPixel) { return; }
-  digitalWrite(timer.pin, HIGH);
+  digitalWrite(timer.pin, MOTOR_HIGH);
   //TODO:maybe add some delay?
-  digitalWrite(timer.pin, LOW);
+  digitalWrite(timer.pin, MOTOR_LOW);
   ++timer.count;
 }
 
