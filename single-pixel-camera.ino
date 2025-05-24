@@ -12,7 +12,7 @@ Jimmy Zhang
 */
 #include <LiquidCrystal_I2C.h>
 #include <SPI.h>
-#include <SD.h>
+#include <SdFat.h>
 #include <TFT_eSPI.h>
 #include <Adafruit_TCS34725.h>
 #include <VTI7064.h>
@@ -181,6 +181,7 @@ struct Temp {
 } temp;
 
 //Other devices
+SdFat SD;
 File bmp;
 File raw;
 File name;
@@ -219,7 +220,7 @@ uint16_t AS7343Readings[18];
 
 void setup() {
   Serial.begin(115200);
-  Serial.println("Serial initialization done.");
+  Serial.println(F("Serial initialization done."));
   
   tft.init();
   tft.setRotation(0);
@@ -227,21 +228,21 @@ void setup() {
   // tft.fillScreen(TFT_WHITE);
   tft.setCursor(0,0);
   tft.setTextSize(1);
-  Serial.println("TFT initialization done.");
-  tft.println("TFT initialization done.");
+  Serial.println(F("TFT initialization done."));
+  tft.println(F("TFT initialization done."));
 
   motorSetup();
-  Serial.println("Motor initialization done.");
-  tft.println("Motor initialization done.");
+  Serial.println(F("Motor initialization done."));
+  tft.println(F("Motor initialization done."));
 
   lcd.begin(16, 2);
   lcd.backlight();
   lcd.setCursor(2, 0);
-  lcd.print("Single Pixel");
+  lcd.print(F("Single Pixel"));
   lcd.setCursor(5, 1);
-  lcd.print("Camera");
-  Serial.println("LCD initialization done.");
-  tft.println("LCD initialization done.");
+  lcd.print(F("Camera"));
+  Serial.println(F("LCD initialization done."));
+  tft.println(F("LCD initialization done."));
 
   //Joystick
   pinMode(JOYSTICK_X, INPUT);
@@ -256,18 +257,18 @@ void setup() {
   //Card detect
   pinMode(24, INPUT_PULLUP);
   if(digitalRead(24) == HIGH) {
-    Serial.println("Waiting card...");
-    tft.println("Waiting card...");
+    Serial.println(F("Waiting card..."));
+    tft.println(F("Waiting card..."));
   }
   while(digitalRead(24) == HIGH) {}
   if (!SD.begin(53)) {
     tft.setTextColor(TFT_RED);
-    Serial.println("SD initialization failed!");
-    tft.println("SD initialization failed!");
+    Serial.println(F("SD initialization failed!"));
+    tft.println(F("SD initialization failed!"));
     // while (1) {}
   } else {
-    Serial.println("SD initialization done.");
-    tft.println("SD initialization done.");
+    Serial.println(F("SD initialization done."));
+    tft.println(F("SD initialization done."));
   }
 
   setDrawTimeFormat(9, 0, TFT_SKYBLUE, TFT_BLACK, 2);
@@ -275,49 +276,49 @@ void setup() {
 
   if (!vti.begin()) {
     tft.setTextColor(TFT_RED);
-    Serial.println("SRAM initialization failed!");
-    tft.println("SRAM initialization failed!");
+    Serial.println(F("SRAM initialization failed!"));
+    tft.println(F("SRAM initialization failed!"));
     // while(1){}
   } else {
-    Serial.println("SRAM initialization done.");
-    tft.println("SRAM initialization done.");
+    Serial.println(F("SRAM initialization done."));
+    tft.println(F("SRAM initialization done."));
   }
 
   //Color sensors---------------------------------------
   if (!tcs34725.begin()) {
     tft.setTextColor(TFT_RED);
-    Serial.println("TCS34725 initialization failed!");
-    tft.println("TCS34725 initialization failed!");
+    Serial.println(F("TCS34725 initialization failed!"));
+    tft.println(F("TCS34725 initialization failed!"));
   } else {
-    Serial.println("TCS34725 initialization done.");
-    tft.println("TCS34725 initialization done.");
+    Serial.println(F("TCS34725 initialization done."));
+    tft.println(F("TCS34725 initialization done."));
   }
 
 
   if(!as73211.begin()) {
     tft.setTextColor(TFT_RED);
-    Serial.println("AS73211 initialization failed!");
-    tft.println("AS73211 initialization failed!");
+    Serial.println(F("AS73211 initialization failed!"));
+    tft.println(F("AS73211 initialization failed!"));
   } else {
-    Serial.println("AS73211 initialization done.");
-    tft.println("AS73211 initialization done.");
+    Serial.println(F("AS73211 initialization done."));
+    tft.println(F("AS73211 initialization done."));
   }
   
-  delay(2000);
+  // delay(2000);
 
   
   if (!as7343.begin()) {
     tft.setTextColor(TFT_RED);
-    Serial.println("AS7343 initialization failed!");
-    tft.println("AS7343 initialization failed!");
+    Serial.println(F("AS7343 initialization failed!"));
+    tft.println(F("AS7343 initialization failed!"));
   } else {
-    Serial.println("AS7343 initializing...");
-    tft.println("AS7343 initializing...");
+    Serial.println(F("AS7343 initializing..."));
+    tft.println(F("AS7343 initializing..."));
     as7343.setATIME(100);
     as7343.setASTEP(999);
     as7343.setGain(AS7343_GAIN_64X);
-    Serial.println("AS7343 initialization done.");
-    tft.println("AS7343 initialization done.");
+    Serial.println(F("AS7343 initialization done."));
+    tft.println(F("AS7343 initialization done."));
   }
 
 
@@ -398,7 +399,7 @@ void scanScreen() {
     redraw = false;
     while(!redraw) {
       refreshTime();
-      if(getJoystickSwitch) {
+      if(getJoystickSwitch()) {
         scanPreview();
       }
       switch(getButtonPressed(buttons, 3)) {
@@ -511,16 +512,13 @@ void moveScreen() {
       if(joystick_x > 0) {
         setMove(MOTOR_HORIZONTAL, MOTOR_BACKWARD, 0);
         movePixel(1);
-      }
-      if(joystick_x < 0) {
+      } else if(joystick_x < 0) {
         setMove(MOTOR_HORIZONTAL, MOTOR_FORWARD, 0);
         movePixel(1);
-      }
-      if(joystick_y > 0) {
+      } else if(joystick_y > 0) {
         setMove(MOTOR_VERTICAL, MOTOR_FORWARD, 0);
         movePixel(1);
-      }
-      if(joystick_y < 0) {
+      } else if(joystick_y < 0) {
         setMove(MOTOR_VERTICAL, MOTOR_BACKWARD, 0);
         movePixel(1);
       }
@@ -578,7 +576,7 @@ void storageScreen() {
     {84, 244, 70, 70, "6", TFT_DARKGREY},
     {164, 244, 70, 70, "7", TFT_DARKGREY},
     {244, 244, 70, 70, "8", TFT_DARKGREY},
-    {4, 324, 150, 70, "Delete", TFT_DARKGREY},
+    {4, 324, 150, 70, F("Delete"), TFT_DARKGREY},
     {164, 324, 150, 70, "Recall", TFT_DARKGREY},
     {4, 404, 150, 70, "Exit", TFT_DARKGREY},
     {164, 404, 150, 70, "Save", TFT_DARKGREY},
@@ -623,7 +621,7 @@ void storageScreen() {
             tft.setTextSize(2);
             tft.setTextColor(getFrontColor(background));
             tft.setTextDatum(CC_DATUM);
-            tft.drawString("Preset "+String(select+1)+" doesn't exist.", 159, 79);
+            tft.drawString("Preset "+String(select+1)+String(F(" doesn't exist.")), 159, 79);
             setDrawTimeFormat(9, 0, TFT_SKYBLUE, background, 2);
             drawTime();
           }
@@ -688,8 +686,8 @@ ScanParam readScanParam(uint8_t filename) {
 
   scan.path = file.read();
   scan.currentPoint = file.read();
-  scan.totalLines = SDRead16(file);
-  scan.pixelsPerLine = SDRead16(file);
+  scan.totalLines = SDRead16(&file);
+  scan.pixelsPerLine = SDRead16(&file);
   scan.pixelMotor = file.read();
   scan.pixelDirection = file.read();
   scan.lineMotor = file.read();
@@ -702,7 +700,7 @@ ScanParam readScanParam(uint8_t filename) {
   scan.as73211Time = file.read();
   scan.as7343Gain = file.read();
   scan.as7343Time = file.read();
-  scan.as7343Step = SDRead16(file);
+  scan.as7343Step = SDRead16(&file);
 
   file.close();
 
@@ -714,11 +712,14 @@ void writeScanParam(uint8_t filename, ScanParam scan) {
   dir.concat(String(filename));
   dir.concat(".dat");
   File file = SD.open(dir, FILE_WRITE);
+  now = rtc.now();
+  file.timestamp(T_CREATE, now.year(), now.month(), now.day(), now.hour(), now.minute(), now.second());
+  file.timestamp(T_WRITE, now.year(), now.month(), now.day(), now.hour(), now.minute(), now.second());
 
   file.write(scan.path);
   file.write(scan.currentPoint);
-  SDWrite16(file, scan.totalLines);
-  SDWrite16(file, scan.pixelsPerLine);
+  SDWrite16(&file, scan.totalLines);
+  SDWrite16(&file, scan.pixelsPerLine);
   file.write(scan.pixelMotor);
   file.write(scan.pixelDirection);
   file.write(scan.lineMotor);
@@ -731,7 +732,7 @@ void writeScanParam(uint8_t filename, ScanParam scan) {
   file.write(scan.as73211Time);
   file.write(scan.as7343Gain);
   file.write(scan.as7343Time);
-  SDWrite16(file, scan.as7343Step);
+  SDWrite16(&file, scan.as7343Step);
 
   file.close();
 }
@@ -1180,7 +1181,7 @@ void drawSetScanAreaScreen(Button* buttons, int size, uint16_t background, uint1
   tft.drawString("Total time:", 9, 24);
   tft.setTextColor(TFT_SKYBLUE);
   // TODO:Not accurate
-  long totalSeconds = ((long)x * y * pulsePerPixel * motor[scan.pixelMotor].intervalTime 
+  unsigned long totalSeconds = ((unsigned long)x * y * pulsePerPixel * motor[scan.pixelMotor].intervalTime 
                           + y * pulsePerPixel * motor[scan.lineMotor].intervalTime) / 1000000 * (2 - scan.isSShape);//calculate based on motor movement time
   tft.drawString(String((int)floor(totalSeconds/3600))+"h "+String((int)floor(totalSeconds/60%60))+"m "+String(totalSeconds%60)+"s", 9, 44);
 
@@ -1564,7 +1565,7 @@ void drawParam(uint16_t background, ScanParam scan) {
   tft.setTextColor(color);
   tft.drawString("Total time:", 169, 99);
   tft.setTextColor(TFT_SKYBLUE);
-  int totalSeconds = ((long)scan.pixelsPerLine * scan.totalLines * motor[scan.pixelMotor].pulsePerPixel * motor[scan.pixelMotor].intervalTime 
+  unsigned long totalSeconds = ((unsigned long)scan.pixelsPerLine * scan.totalLines * motor[scan.pixelMotor].pulsePerPixel * motor[scan.pixelMotor].intervalTime 
                           + scan.totalLines * motor[scan.lineMotor].pulsePerPixel * motor[scan.lineMotor].intervalTime) / 1000000 * (2 - scan.isSShape);//calculate based on motor movement time
   tft.drawString(String((int)floor(totalSeconds/3600))+"h "+String((int)floor(totalSeconds/60%60))+"m "+String(totalSeconds%60)+"s", 169, 119);
 
@@ -1825,7 +1826,20 @@ void setScanMotor() {
 //
 void scanTask() {
   tft.fillScreen(TFT_BLACK);
+  
+  if (!SD.begin(53)) {
+    Serial.println("SD initialization failed!");
+    tft.setTextSize(2);
+    tft.setCursor(0, 0);
+    tft.setTextColor(TFT_RED);
+    tft.print("SD Initialization Failed!");
+    delay(1000);
+    return;
+  }
+
   String dir;
+
+  now = rtc.now();
 
   //for touch screen to exit when scanning
   unsigned long lastPressed = 0;
@@ -1856,21 +1870,25 @@ void scanTask() {
   String bmpDir = dir;
   bmpDir.concat(".bmp");
   bmp = SD.open(bmpDir, FILE_WRITE);
+  bmp.timestamp(T_CREATE, now.year(), now.month(), now.day(), now.hour(), now.minute(), now.second());
+  bmp.timestamp(T_WRITE, now.year(), now.month(), now.day(), now.hour(), now.minute(), now.second());
   for (int i = 0; i < 54; i++) {
     bmp.write(bmpHead[i]);
   }
 
   dir.concat(".raw");
   raw = SD.open(dir, FILE_WRITE);
+  raw.timestamp(T_CREATE, now.year(), now.month(), now.day(), now.hour(), now.minute(), now.second());
+  raw.timestamp(T_WRITE, now.year(), now.month(), now.day(), now.hour(), now.minute(), now.second());
   //Meta data, total 16 byte, 
-  SDWrite16(raw, scan.pixelsPerLine);   //0-1 pixelsPerLine
-  SDWrite16(raw, scan.totalLines);      //2-3 totalLines
+  SDWrite16(&raw, scan.pixelsPerLine);   //0-1 pixelsPerLine
+  SDWrite16(&raw, scan.totalLines);      //2-3 totalLines
   raw.write(scan.path);                 //4   path
   raw.write(scan.isSShape);             //5   S-Shape(1 for yes)
   raw.write(motor[0].pulsePerPixel);    //6   motor0 pulsePerPixel
-  SDWrite16(raw, motor[0].intervalTime);//7-8
+  SDWrite16(&raw, motor[0].intervalTime);//7-8
   raw.write(motor[1].pulsePerPixel);    //9
-  SDWrite16(raw, motor[1].intervalTime);//10-11
+  SDWrite16(&raw, motor[1].intervalTime);//10-11
   raw.write(scan.sensor);               //12
   raw.write(scan.tcs34725Time);         //13
   raw.write(scan.tcs34725Gain);         //14
@@ -1939,6 +1957,7 @@ void scanTask() {
       }
       if(touch.isTouching() && isPressed && (millis() - lastPressed < 3000) && (millis() - lastPressed > 1000)) {
         //touched and touched within 3s (to confirm, needs to be more than 1s since last touch)
+        lcd.clear();
         lcd.setCursor(0,0);
         lcd.print("Quit confirm....");
 
@@ -1973,6 +1992,11 @@ void scanTask() {
         raw.close();
 
         while(!touch.isTouching()) {}//Wait till touch the screen to go back to main screen
+        lcd.clear();
+        lcd.setCursor(2, 0);
+        lcd.print("Single Pixel");
+        lcd.setCursor(5, 1);
+        lcd.print("Camera");
         return;
       }
 
@@ -2006,12 +2030,12 @@ void scanTask() {
 
       //TODO:Add all sensor mode
       if(scan.sensor == SENSOR_TCS34725 || scan.sensor == SENSOR_AS73211) {
-        SDWrite16(raw, temp.blue);
-        SDWrite16(raw, temp.green);
-        SDWrite16(raw, temp.red);
+        SDWrite16(&raw, temp.blue);
+        SDWrite16(&raw, temp.green);
+        SDWrite16(&raw, temp.red);
       } else if(scan.sensor == SENSOR_AS7343) {
         for(int i = 0; i < 18; ++i) {
-          SDWrite16(raw, AS7343Readings[i]);
+          SDWrite16(&raw, AS7343Readings[i]);
         }
       }
     }
@@ -2298,14 +2322,14 @@ void timerInterrupt() {
 // }
 
 //Little-endian ordering
-void SDWrite16(File file, uint16_t data) {
-  file.write(data % 256);//TODO:try | 0xFF
-  file.write(floor(data / 256));//TODO:try >>8
+void SDWrite16(File *file, uint16_t data) {
+  file->write(data % 256);//TODO:try | 0xFF
+  file->write(floor(data / 256));//TODO:try >>8
 }
 
-uint16_t SDRead16(File file) {
-  uint16_t data = file.read();
-  data += (file.read() << 8);
+uint16_t SDRead16(File *file) {
+  uint16_t data = file->read();
+  data += (file->read() << 8);
   return data;
 }
 
