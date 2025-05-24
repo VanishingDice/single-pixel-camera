@@ -220,9 +220,19 @@ uint16_t AS7343Readings[18];
 void setup() {
   Serial.begin(115200);
   Serial.println("Serial initialization done.");
+  
+  tft.init();
+  tft.setRotation(0);
+  tft.fillScreen(TFT_BLACK);
+  // tft.fillScreen(TFT_WHITE);
+  tft.setCursor(0,0);
+  tft.setTextSize(1);
+  Serial.println("TFT initialization done.");
+  tft.println("TFT initialization done.");
 
   motorSetup();
   Serial.println("Motor initialization done.");
+  tft.println("Motor initialization done.");
 
   lcd.begin(16, 2);
   lcd.backlight();
@@ -231,6 +241,7 @@ void setup() {
   lcd.setCursor(5, 1);
   lcd.print("Camera");
   Serial.println("LCD initialization done.");
+  tft.println("LCD initialization done.");
 
   //Joystick
   pinMode(JOYSTICK_X, INPUT);
@@ -240,60 +251,73 @@ void setup() {
   //#EN of TXB0108
   pinMode(26, OUTPUT);
   digitalWrite(26, HIGH);
+
+
   //Card detect
   pinMode(24, INPUT_PULLUP);
   if(digitalRead(24) == HIGH) {
     Serial.println("Waiting card...");
+    tft.println("Waiting card...");
   }
   while(digitalRead(24) == HIGH) {}
   if (!SD.begin(53)) {
+    tft.setTextColor(TFT_RED);
     Serial.println("SD initialization failed!");
+    tft.println("SD initialization failed!");
     // while (1) {}
   } else {
     Serial.println("SD initialization done.");
+    tft.println("SD initialization done.");
   }
-
-  tft.init();
-  tft.setRotation(0);
-  tft.fillScreen(TFT_BLACK);
-  // tft.fillScreen(TFT_WHITE);
-  Serial.println("TFT initialization done.");
 
   setDrawTimeFormat(9, 0, TFT_SKYBLUE, TFT_BLACK, 2);
   prevTime = now = rtc.now();
 
   if (!vti.begin()) {
+    tft.setTextColor(TFT_RED);
     Serial.println("SRAM initialization failed!");
+    tft.println("SRAM initialization failed!");
     // while(1){}
   } else {
     Serial.println("SRAM initialization done.");
+    tft.println("SRAM initialization done.");
   }
 
   //Color sensors---------------------------------------
   if (!tcs34725.begin()) {
+    tft.setTextColor(TFT_RED);
     Serial.println("TCS34725 initialization failed!");
+    tft.println("TCS34725 initialization failed!");
   } else {
     Serial.println("TCS34725 initialization done.");
+    tft.println("TCS34725 initialization done.");
   }
 
 
   if(!as73211.begin()) {
+    tft.setTextColor(TFT_RED);
     Serial.println("AS73211 initialization failed!");
+    tft.println("AS73211 initialization failed!");
   } else {
     Serial.println("AS73211 initialization done.");
+    tft.println("AS73211 initialization done.");
   }
   
   delay(2000);
 
   
   if (!as7343.begin()) {
+    tft.setTextColor(TFT_RED);
     Serial.println("AS7343 initialization failed!");
+    tft.println("AS7343 initialization failed!");
   } else {
     Serial.println("AS7343 initializing...");
+    tft.println("AS7343 initializing...");
     as7343.setATIME(100);
     as7343.setASTEP(999);
     as7343.setGain(AS7343_GAIN_64X);
     Serial.println("AS7343 initialization done.");
+    tft.println("AS7343 initialization done.");
   }
 
 
@@ -1938,9 +1962,9 @@ void scanTask() {
         //fill image with black
         while(i < scan.totalLines) {
           for(uint16_t k = 0; k < scan.pixelsPerLine; ++k) {
-            bmp.write(0);
-            bmp.write(0);
-            bmp.write(0);
+            bmp.write((uint8_t)0x00);
+            bmp.write((uint8_t)0x00);
+            bmp.write((uint8_t)0x00);
           }
           ++i;
         }
