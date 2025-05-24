@@ -48,6 +48,8 @@ Jimmy Zhang
 #define THEME_ORG tft.color565(255, 180, 80)
 #define THEME_GRN tft.color565(90, 240, 150)
 
+//TODO:1000 pixel limit set
+
 //For computer control
 //#define CAMERA_DEBUG_MODE
 
@@ -372,6 +374,9 @@ void scanScreen() {
     redraw = false;
     while(!redraw) {
       refreshTime();
+      if(getJoystickSwitch) {
+        scanPreview();
+      }
       switch(getButtonPressed(buttons, 3)) {
         case 0:
           scanPreview();
@@ -420,7 +425,7 @@ void settingScreen() {
       pressed = getButtonPressed(buttons, 7);
       switch(pressed) {
         case 0:
-          scanAreaScreen();
+          setScanAreaScreen();
           redraw = true;
           break;
         case 1:
@@ -1043,7 +1048,7 @@ void refreshGainTimeText(uint16_t background, uint8_t gain, uint8_t time) {
 }
 
 //Scan Area Setting
-void scanAreaScreen() {
+void setScanAreaScreen() {
   struct Button buttons[11] = {
     {244, 84, 70, 70, "X", TFT_SKYBLUE},
     {244, 164, 70, 70, "Y", TFT_SKYBLUE},
@@ -1071,7 +1076,7 @@ void scanAreaScreen() {
   uint8_t currentPointTmp = scan.currentPoint;
 
   while(1) {
-    drawScanAreaScreen(buttons, 7, background, xTmp, yTmp, pppTmp, pathTmp, sShapeTmp, currentPointTmp);
+    drawSetScanAreaScreen(buttons, 7, background, xTmp, yTmp, pppTmp, pathTmp, sShapeTmp, currentPointTmp);
     setDrawTimeFormat(9, 0, TFT_SKYBLUE, background, 2);
     drawTime();
     redraw = false;
@@ -1091,11 +1096,11 @@ void scanAreaScreen() {
           if(pathTmp >= 8) {
             pathTmp = 0;
           }
-          freshScanAreaArrowMatrix(background, xTmp, yTmp, pathTmp);
+          freshSetScanAreaArrowMatrix(background, xTmp, yTmp, pathTmp);
           break;
         case 3:
           sShapeTmp = !sShapeTmp;
-          freshScanAreaSShape(sShapeTmp, background);
+          freshSetScanAreaSShape(sShapeTmp, background);
           break;
         case 4:
           pppTmp = getIntegerScreen(F("Pulse Per Pixel:"));
@@ -1115,25 +1120,25 @@ void scanAreaScreen() {
           break;
         case 7:
           currentPointTmp = 0;
-          freshScanAreaCurrentPoint(currentPointTmp, xTmp, yTmp, background);
+          freshSetScanAreaCurrentPoint(currentPointTmp, xTmp, yTmp, background);
           break;
         case 8:
           currentPointTmp = 1;
-          freshScanAreaCurrentPoint(currentPointTmp, xTmp, yTmp, background);
+          freshSetScanAreaCurrentPoint(currentPointTmp, xTmp, yTmp, background);
           break;
         case 9:
           currentPointTmp = 2;
-          freshScanAreaCurrentPoint(currentPointTmp, xTmp, yTmp, background);
+          freshSetScanAreaCurrentPoint(currentPointTmp, xTmp, yTmp, background);
           break;
         case 10:
           currentPointTmp = 3;
-          freshScanAreaCurrentPoint(currentPointTmp, xTmp, yTmp, background);
+          freshSetScanAreaCurrentPoint(currentPointTmp, xTmp, yTmp, background);
           break;
       }
     }
   }
 }
-void drawScanAreaScreen(Button* buttons, int size, uint16_t background, uint16_t x, uint16_t y, uint16_t pulsePerPixel, uint8_t path, bool isSShape, uint8_t currentPoint) {
+void drawSetScanAreaScreen(Button* buttons, int size, uint16_t background, uint16_t x, uint16_t y, uint16_t pulsePerPixel, uint8_t path, bool isSShape, uint8_t currentPoint) {
   float ratio = (float)150 / max(x,y);
   tft.fillScreen(background);
   tft.drawRect(9, 109, ratio*x, ratio*y, getFrontColor(background));
@@ -1162,17 +1167,17 @@ void drawScanAreaScreen(Button* buttons, int size, uint16_t background, uint16_t
     tft.setTextColor(TFT_SILVER);
     tft.drawString("S-Shape Disable", 9, 269);
   }
-  freshScanAreaCurrentPoint(currentPoint, x, y, background);
+  freshSetScanAreaCurrentPoint(currentPoint, x, y, background);
 
 }
-void freshScanAreaArrowMatrix(uint16_t background, uint16_t x, uint16_t y, uint8_t path) {
+void freshSetScanAreaArrowMatrix(uint16_t background, uint16_t x, uint16_t y, uint8_t path) {
   float ratio = (float)150 / max(x,y);
   // tft.fillRect(10, 110, ratio*x - 2, ratio*y - 2, background);
   // Serial.println("X:"+String(ratio*x)+", Y:"+String(ratio*y)+", Path:"+String(path));
   drawArrowMatrix(9, 109, ratio*x, ratio*y, path-1<0 ? 7 : path-1, background, 15);//cover the last arrows
   drawArrowMatrix(9, 109, ratio*x, ratio*y, path, getFrontColor(background), 15);
 }
-void freshScanAreaSShape(bool isSShape, uint16_t background) {
+void freshSetScanAreaSShape(bool isSShape, uint16_t background) {
   if(isSShape) {
     tft.setTextColor(THEME_GRN, background);
     tft.drawString("S-Shape Enable ", 9, 269);
@@ -1181,7 +1186,7 @@ void freshScanAreaSShape(bool isSShape, uint16_t background) {
     tft.drawString("S-Shape Disable", 9, 269);
   }
 }
-void freshScanAreaCurrentPoint(uint8_t currentPoint, uint16_t x, uint16_t y, uint16_t background) {
+void freshSetScanAreaCurrentPoint(uint8_t currentPoint, uint16_t x, uint16_t y, uint16_t background) {
   float ratio = (float)150 / max(x,y);
 
   for(int i = 0; i < 4; ++i) {
@@ -1478,7 +1483,11 @@ bool getJoystick(int* x, int* y) {
     *y = 0;
   }
 
-  return analogRead(JOYSTICK_SW)<500 ? true : false;//SW pressed
+  return analogRead(JOYSTICK_SW) < 500;//SW pressed
+}
+
+bool getJoystickSwitch() {
+  return analogRead(JOYSTICK_SW) < 500;//SW pressed
 }
 
 //parameters on top of main, setting and scan screen
@@ -1794,6 +1803,10 @@ void scanTask() {
   tft.fillScreen(TFT_BLACK);
   String dir;
 
+  //for touch screen to exit when scanning
+  unsigned long lastPressed = 0;
+  bool isPressed = false;
+
   if(scan.filename == 0) {
     now = rtc.now();
     dir = String(now.year()) + "-" + String(now.month()) + "-" + String(now.day()) + " " + String(now.hour()) + "-" + String(now.minute()) + "-" + String(now.second());
@@ -1803,7 +1816,7 @@ void scanTask() {
 
   lcd.setCursor(0, 0);
   lcd.print("Name:");
-  lcd.print(dir);
+  lcd.print(dir.substring(10));//avoid show the date, only show the time
   lcd.print("           ");
   //Real direction
   // bmpHead[18] = scan.yPixels%256;
@@ -1873,13 +1886,72 @@ void scanTask() {
     lcd.print(i);
     lcd.print("               ");
 
-    if(scan.isSShape && i&2 != 0) {
+    if(scan.isSShape && (i%2 != 0)) {
       setMove(scan.pixelMotor, !scan.pixelDirection, 0);
     } else {
       setMove(scan.pixelMotor, scan.pixelDirection, 0);
     }
 
     for (uint16_t j = 0; j < scan.pixelsPerLine; ++j) {
+      if(isPressed && !touch.isTouching() && (millis() - lastPressed >= 3000)) {
+        //no touching since last touch for more than 3s
+        lcd.setCursor(0, 0);
+        lcd.print("Name:");
+        lcd.print(dir.substring(10));//avoid show the date, only show the time
+        lcd.print("           ");
+        lcd.setCursor(0, 1);
+        lcd.print(i);
+        lcd.print("               ");
+        isPressed = false;
+      }
+      if(touch.isTouching() && !isPressed) {
+        //touched and didn't touch before
+        lcd.setCursor(0, 0);
+        lcd.print("  Touch again   ");
+        lcd.setCursor(0, 1);
+        lcd.print("   to quit...   ");
+        isPressed = true;
+        lastPressed = millis();
+      }
+      if(touch.isTouching() && isPressed && (millis() - lastPressed < 3000) && (millis() - lastPressed > 1000)) {
+        //touched and touched within 3s (to confirm, needs to be more than 1s since last touch)
+        lcd.setCursor(0,0);
+        lcd.print("Quit confirm....");
+
+        for(uint16_t k = 0; k < scan.pixelsPerLine; ++k) {
+          bmp.write(lineTemp[k][0]);
+          bmp.write(lineTemp[k][1]);
+          bmp.write(lineTemp[k][2]);
+        }
+
+        //Move back to the start point
+        if(scan.isSShape && (i%2 != 0)) {
+          setMove(scan.pixelMotor, scan.pixelDirection, 0);
+        } else {
+          setMove(scan.pixelMotor, !scan.pixelDirection, 0);
+        }
+        movePixel(j);
+        setMove(scan.lineMotor, !scan.lineDirection, 0);
+        movePixel(i);
+        disableTimer();
+
+        //fill image with black
+        while(i < scan.totalLines) {
+          for(uint16_t k = 0; k < scan.pixelsPerLine; ++k) {
+            bmp.write(0);
+            bmp.write(0);
+            bmp.write(0);
+          }
+          ++i;
+        }
+
+        bmp.close();
+        raw.close();
+
+        while(!touch.isTouching()) {}//Wait till touch the screen to go back to main screen
+        return;
+      }
+
       temp.yCursor = j;
 
       //for motor smooth start
@@ -1908,6 +1980,7 @@ void scanTask() {
         tft.drawPixel(temp.xCursor % 320, temp.yCursor, tft.color565(min(temp.red, 255), min(temp.green, 255), min(temp.blue, 255)));//TODO:use xCursor and yCursor
       }
 
+      //TODO:Add all sensor mode
       if(scan.sensor == SENSOR_TCS34725 || scan.sensor == SENSOR_AS73211) {
         SDWrite16(raw, temp.blue);
         SDWrite16(raw, temp.green);
@@ -1948,6 +2021,8 @@ void scanTask() {
 
   bmp.close();
   raw.close();
+
+  while(!touch.isTouching()) {}//Wait till touch the screen to go back to main screen
 }
 
 void scanPreview() {
