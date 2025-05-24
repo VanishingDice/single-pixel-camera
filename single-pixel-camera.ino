@@ -72,7 +72,7 @@ enum Sensor {
   SENSOR_ALL
 };
 
-const PROGMEM struct {
+const struct {
   tcs34725Gain_t tcs34725;
   IntegrationGain as73211;
   AS7343_gain_t as7343;
@@ -91,6 +91,7 @@ const PROGMEM struct {
   {0,                 Gain2048, AS7343_GAIN_1024X},// 第12行（第二列结束）
   {0,                 0,        AS7343_GAIN_2048X}  // 第13行（仅AS7343有增益）
 };
+
 struct {
   uint8_t tcs34725 = 4;
   uint8_t as73211 = 12;
@@ -156,7 +157,7 @@ const char* const GainStr[3][13] = {
   {"0.5X","1X","2X","4X","8X","16X","32X","64X","128X","256X","512X","1024X","2048X"}
 };
 
-const String SensorStr[4] = {"TCS34725","AS73211","AS7341","All Sensor"};
+const String SensorStr[4] = {"TCS34725","AS73211","AS7343","All Sensor"};
 
 //
 struct {
@@ -184,7 +185,7 @@ File name;
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 Adafruit_TCS34725 tcs34725 = Adafruit_TCS34725(TCS34725_INTEGRATIONTIME_24MS, TCS34725_GAIN_60X);
 AMS_OSRAM_AS7343 as7343;
-AS73211 as73211 = AS73211(0x76);//TODO:change address
+AS73211 as73211 = AS73211(0x75);//Address Changed in my board
 TFT_eSPI tft = TFT_eSPI();//needs to be 4-wire mode, but don't connect MISO
 VTI7064 vti = VTI7064(9);
 ResistiveTouchScreen touch = ResistiveTouchScreen();
@@ -246,14 +247,18 @@ void setup() {
   if (!SD.begin(53)) {
     Serial.println("SD initialization failed!");
     // while (1) {}
+  } else {
+    Serial.println("SD initialization done.");
   }
-  Serial.println("SD initialization done.");
 
   tft.init();
   tft.setRotation(0);
   tft.fillScreen(TFT_BLACK);
   // tft.fillScreen(TFT_WHITE);
   Serial.println("TFT initialization done.");
+
+  setDrawTimeFormat(9, 0, TFT_SKYBLUE, TFT_BLACK, 2);
+  prevTime = now = rtc.now();
 
   if (!vti.begin()) {
     Serial.println("SRAM initialization failed!");
@@ -269,23 +274,26 @@ void setup() {
     Serial.println("TCS34725 initialization done.");
   }
 
-  if (!as7343.begin()) {
-    Serial.println("AS7343 initialization failed!");
-  } else {
-    as7343.setATIME(100);
-    as7343.setASTEP(999);
-    as7343.setGain(AS7343_GAIN_64X);
-    Serial.println("AS7343 initialization done.");
-  }
 
   if(!as73211.begin()) {
     Serial.println("AS73211 initialization failed!");
   } else {
     Serial.println("AS73211 initialization done.");
   }
+  
+  delay(2000);
 
-  setDrawTimeFormat(9, 0, TFT_SKYBLUE, TFT_BLACK, 2);
-  prevTime = now = rtc.now();
+  
+  if (!as7343.begin()) {
+    Serial.println("AS7343 initialization failed!");
+  } else {
+    Serial.println("AS7343 initializing...");
+    as7343.setATIME(100);
+    as7343.setASTEP(999);
+    as7343.setGain(AS7343_GAIN_64X);
+    Serial.println("AS7343 initialization done.");
+  }
+
 
 }
 
@@ -795,6 +803,11 @@ void gainTimeScreen() {
   uint8_t gainTmp;//don't change the data type
   uint8_t timeTmp;
   uint8_t stepTmp;
+  
+  uint16_t r,g,b;
+
+  bool isApply = false;
+
   //Init value
   switch(scan.sensor) {
     case SENSOR_TCS34725:
@@ -831,10 +844,12 @@ void gainTimeScreen() {
         case 0:
           gainTmp = getIntegerScreen("Gain:");
           redraw = true;
+          isApply = false;
           break;
         case 1:
           timeTmp = getIntegerScreen("Time:");
           redraw = true;
+          isApply = false;
           break;
         case 2:
           if(gainTmp > 0) {
@@ -852,6 +867,7 @@ void gainTimeScreen() {
                 break;
             }
           }
+          isApply = false;
           refreshGainTimeText(background, gainTmp, timeTmp);
           break;
         case 3:
@@ -878,6 +894,7 @@ void gainTimeScreen() {
               }
               break;
           }
+          isApply = false;
           refreshGainTimeText(background, gainTmp, timeTmp);
           break;
         case 4:
@@ -897,6 +914,7 @@ void gainTimeScreen() {
               --timeTmp;//2.78~711ms 0~255 unsigned so don't have to check bound(maybe?)
               break;
           }
+          isApply = false;
           refreshGainTimeText(background, gainTmp, timeTmp);
           break;
         case 5:
@@ -916,37 +934,56 @@ void gainTimeScreen() {
               ++timeTmp;//2.78~711ms 0~255 unsigned so don't have to check bound(maybe?)
               break;
           }
+          isApply = false;
           refreshGainTimeText(background, gainTmp, timeTmp);
           break;
         case 6:
           if(scan.sensor == SENSOR_AS7343) {
             stepTmp = getIntegerScreen("Step:");
+            isApply = false;
+            redraw = true;
           }
-          redraw = true;
           break;
         case 7:
-          tcs34725.setIntegrationTime(scan.tcs34725Time);
-          tcs34725.setGain(sensorGains[scan.tcs34725Gain].tcs34725);
-          as73211.setGainAndTime(sensorGains[scan.as73211Gain].as73211, scan.as73211Time);
-          as7343.setASTEP(scan.as7343Step);
-          as7343.setATIME(scan.as7343Time);
-          as7343.setGain(sensorGains[scan.as7343Gain].as7343);
-          switch(scan.sensor) {
-            case SENSOR_TCS34725:
-              tcs34725.setIntegrationTime(timeTmp);
-              tcs34725.setGain(sensorGains[gainTmp].tcs34725);
-              break;
-            case SENSOR_AS73211:
-              as73211.setGainAndTime(sensorGains[gainTmp].as73211, timeTmp);
-              break;
-            case SENSOR_AS7343:
-              as7343.setASTEP(stepTmp);
-              as7343.setATIME(timeTmp);
-              as7343.setGain(sensorGains[gainTmp].as7343);
-              break;
+          // tcs34725.setIntegrationTime(scan.tcs34725Time);
+          // tcs34725.setGain(sensorGains[scan.tcs34725Gain].tcs34725);
+          // as73211.setGainAndTime(sensorGains[scan.as73211Gain].as73211, scan.as73211Time);
+          // as7343.setASTEP(scan.as7343Step);
+          // as7343.setATIME(scan.as7343Time);
+          // as7343.setGain(sensorGains[scan.as7343Gain].as7343);
+
+          if(!isApply) {
+            Serial.println("Apply");
+            switch(scan.sensor) {
+              case SENSOR_TCS34725:
+                tcs34725.setIntegrationTime(timeTmp);
+                tcs34725.setGain(sensorGains[gainTmp].tcs34725);
+                Serial.println(timeTmp);
+                Serial.println(gainTmp);
+                Serial.println(sensorGains[gainTmp].tcs34725);
+                break;
+              case SENSOR_AS73211:
+                as73211.setState(Configuration_state);
+                Serial.println(timeTmp);
+                Serial.println(gainTmp);
+                Serial.println(sensorGains[gainTmp].as73211);
+                Serial.println(as73211.setGainAndTime(sensorGains[gainTmp].as73211, timeTmp));
+                
+                as73211.setState(Measurement_state_Start_measurement);
+                break;
+              case SENSOR_AS7343:
+                as7343.setASTEP(stepTmp);
+                as7343.setATIME(timeTmp);
+                as7343.setGain(sensorGains[gainTmp].as7343);
+                Serial.println(timeTmp);
+                Serial.println(gainTmp);
+                Serial.println(sensorGains[gainTmp].as7343);
+                break;
+            }
+            isApply = true;
+            delay(500);
           }
 
-          uint16_t r,g,b;
           readColor(&r, &g, &b, scan.sensor);
           tft.fillRect(244, 84, 70, 30, tft.color565(min(r, 255), min(g, 255), min(b, 255)));
           tft.setTextSize(2);
@@ -994,13 +1031,13 @@ void refreshGainTimeText(uint16_t background, uint8_t gain, uint8_t time) {
   tft.drawString("Gain:"+String(GainStr[scan.sensor][gain])+"   ", 9, 9);
   switch(scan.sensor) {
     case SENSOR_TCS34725:
-      tft.drawString("Time:"+String(256-time)+"c "+String((256-time)*12/5)+"ms", 9, 49);
+      tft.drawString("Time:"+String(256-time)+"c "+String((256-time)*12/5)+"ms      ", 9, 49);
       break;
     case SENSOR_AS73211:
-      tft.drawString("Time:"+String(pow(2, time))+"ms", 9, 49);
+      tft.drawString("Time:"+String(pow(2, time))+"ms         ", 9, 49);
       break;
     case SENSOR_AS7343:
-      tft.drawString("Time:"+String(time)+"c "+String((time)*scan.as7343Step*2.78/100)+"ms", 9, 49);;
+      tft.drawString("Time:"+String(time)+"c "+String((time)*scan.as7343Step*2.78/1000)+"ms         ", 9, 49);;
       break;
   }
 }
@@ -1159,7 +1196,7 @@ void sensorScreen() {
   struct Button buttons[6] =  {
     {4, 4, 150, 150, "TCS34725", TFT_DARKGREY},
     {164, 4, 150, 150, "AS73211", TFT_DARKGREY},
-    {4, 164, 150, 150, "AS7341", TFT_DARKGREY},
+    {4, 164, 150, 150, "AS7343", TFT_DARKGREY},
     {164, 164, 150, 150, "ALL", TFT_DARKGREY},
     {4, 324, 150, 150, "Exit", TFT_DARKGREY},
     {164, 324, 150, 150, "Save", TFT_DARKGREY},
@@ -2025,6 +2062,45 @@ void readColor(uint16_t* red, uint16_t* green, uint16_t* blue, Sensor sensor) {
       if (!as7343.readAllChannels(AS7343Readings)){
         Serial.println("Error reading all channels!");
       }
+      
+      Serial.print("FZ 450nm : ");
+      Serial.println(AS7343Readings[0]);
+      Serial.print("FY 555nm : ");
+      Serial.println(AS7343Readings[1]);
+      Serial.print("FXL 600nm : ");
+      Serial.println(AS7343Readings[2]);
+      Serial.print("NIR 855nm : ");
+      Serial.println(AS7343Readings[3]);
+      Serial.print("2X VIS 1 : ");
+      Serial.println(AS7343Readings[4]);
+      Serial.print("FD 1 : ");
+      Serial.println(AS7343Readings[5]);
+      Serial.print("F2 425nm : ");
+      Serial.println(AS7343Readings[6]);
+      Serial.print("F3 475nm : ");
+      Serial.println(AS7343Readings[7]);
+      Serial.print("F4 515nm : ");
+      Serial.println(AS7343Readings[8]);
+      Serial.print("F6 640nm : ");
+      Serial.println(AS7343Readings[9]);
+      Serial.print("2X VIS 2 : ");
+      Serial.println(AS7343Readings[10]);
+      Serial.print("FD 2 : ");
+      Serial.println(AS7343Readings[11]);
+      Serial.print("F1 405nm : ");
+      Serial.println(AS7343Readings[12]);
+      Serial.print("F7 690nm : "); 
+      Serial.println(AS7343Readings[13]);
+      Serial.print("F8 745nm : ");
+      Serial.println(AS7343Readings[14]);
+      Serial.print("F5 550nm : "); 
+      Serial.println(AS7343Readings[15]);
+      Serial.print("2X VIS 3 : ");
+      Serial.println(AS7343Readings[16]);
+      Serial.print("FD 3 : ");
+      Serial.println(AS7343Readings[17]);
+      Serial.println();
+
       *red = AS7343Readings[9];
       *green = AS7343Readings[6];
       *blue = AS7343Readings[1];
