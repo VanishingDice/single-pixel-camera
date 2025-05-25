@@ -430,7 +430,7 @@ void settingScreen() {
     {4, 164, 150, 70, "Scan Area", TFT_DARKGREY},
     {164, 164, 150, 70, "Gain,Time", TFT_DARKGREY},
     {4, 244, 150, 70, "Filename", TFT_DARKGREY},
-    {164, 244, 150, 70, "Storage", TFT_DARKGREY},
+    {164, 244, 150, 70, "Preset", TFT_DARKGREY},
     {4, 324, 150, 70, "Motor", TFT_DARKGREY},
     {164, 324, 150, 70, "Sensor", TFT_DARKGREY},
     {4, 404, 150, 70, "Exit", TFT_DARKGREY},
@@ -585,7 +585,7 @@ void presetScreen() {
   uint16_t background = tft.color565(80, 80, 80);
   bool redraw = false;
   int pressed = -1;
-  int select = -1;//selected storage
+  int select = -1;//selected preset
 
   ScanParam scanTmp = scan;
 
@@ -679,7 +679,7 @@ void drawPresetScreen(Button* buttons, int size, uint16_t background, ScanParam 
 ScanParam readPresetFromSD(uint8_t filename) {
   ScanParam scan;
 
-  String dir = "storage/";
+  String dir = "preset/";
   dir.concat(String(filename));
   dir.concat(".dat");
   File file = SD.open(dir, FILE_READ);
@@ -708,7 +708,7 @@ ScanParam readPresetFromSD(uint8_t filename) {
 
 }
 void writePresetToSD(uint8_t filename, ScanParam scan) {
-  String dir = "storage/";
+  String dir = "preset/";
   dir.concat(String(filename));
   dir.concat(".dat");
   File file = SD.open(dir, FILE_WRITE);
@@ -737,7 +737,7 @@ void writePresetToSD(uint8_t filename, ScanParam scan) {
   file.close();
 }
 bool isPresetFileExist(uint8_t filename) {
-  String dir = "storage/";
+  String dir = "preset/";
   dir.concat(String(filename));
   dir.concat(".dat");
   return SD.exists(dir);
