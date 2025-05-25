@@ -462,7 +462,7 @@ void settingScreen() {
           redraw = true; 
           break;
         case 3:
-          storageScreen();
+          presetScreen();
           redraw = true; 
           break;
         case 4:
@@ -566,7 +566,7 @@ void imageScreen() {
 }
 
 //
-void storageScreen() {
+void presetScreen() {
   struct Button buttons[12] =  {
     {4, 164, 70, 70, "1", TFT_DARKGREY},
     {84, 164, 70, 70, "2", TFT_DARKGREY},
@@ -590,7 +590,7 @@ void storageScreen() {
   ScanParam scanTmp = scan;
 
   while(1) {
-    drawStorageScreen(buttons, 12, background, scanTmp);
+    drawPresetScreen(buttons, 12, background, scanTmp);
     setDrawTimeFormat(9, 0, TFT_SKYBLUE, background, 2);
     drawTime();
     redraw = false;
@@ -614,7 +614,7 @@ void storageScreen() {
           drawButtons(buttons, 8, background);
 
           if(isPresetFileExist(pressed)) {
-            scanTmp = readScanParam(pressed);
+            scanTmp = readPresetFromSD(pressed);
             redraw = true; 
           } else {
             tft.fillRect(0, 0, 320, 160, background);
@@ -628,7 +628,7 @@ void storageScreen() {
           break;
         case 8:
           if(select != -1) {
-            String dir = "storage/";
+            String dir = "preset/";
             dir.concat(String(select));
             dir.concat(".dat");
             SD.remove(dir);
@@ -657,7 +657,7 @@ void storageScreen() {
           break;
         case 11:
           if(select != -1) {
-            writeScanParam(select, scan);
+            writePresetToSD(select, scan);
             tft.fillRect(0, 0, 320, 160, background);
             tft.setTextSize(3);
             tft.setTextColor(getFrontColor(background));
@@ -671,12 +671,12 @@ void storageScreen() {
     }
   }
 }
-void drawStorageScreen(Button* buttons, int size, uint16_t background, ScanParam scan) {
+void drawPresetScreen(Button* buttons, int size, uint16_t background, ScanParam scan) {
   tft.fillScreen(background);
   drawParam(background, scan);
   drawButtons(buttons, size, background);
 }
-ScanParam readScanParam(uint8_t filename) {
+ScanParam readPresetFromSD(uint8_t filename) {
   ScanParam scan;
 
   String dir = "storage/";
@@ -707,7 +707,7 @@ ScanParam readScanParam(uint8_t filename) {
   return scan;
 
 }
-void writeScanParam(uint8_t filename, ScanParam scan) {
+void writePresetToSD(uint8_t filename, ScanParam scan) {
   String dir = "storage/";
   dir.concat(String(filename));
   dir.concat(".dat");
